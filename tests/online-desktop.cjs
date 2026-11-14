@@ -229,7 +229,7 @@ function bridge() {
     await music.getByText('Apple fixture', { exact: true }).waitFor();
     assert.equal(await music.getByRole('checkbox', { name: 'Apple fixture', exact: true }).isDisabled(), true);
     await music.getByRole('button', { name: '在浏览器播放', exact: true }).click();
-    const appleCalls = await page.evaluate(() => window.__onlineCalls.filter((c) => c.op === 'appleOpen'));
+    const appleCalls = await page.evaluate(() => window.__onlineCalls.filter((c) => c.op === 'openRemote'));
     assert(appleCalls.some((c) => c.args.playlistId === 'apple-list'));
     assert(appleCalls.some((c) => c.args.key === 'apple:123'));
     assert.equal(

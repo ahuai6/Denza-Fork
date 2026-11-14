@@ -1,3 +1,4 @@
+import catalog from '../../../shared/online-providers.json';
 export type MusicPlatform = 'netease' | 'qq' | 'kugou' | 'apple';
 export interface OnlineSong {
   platform: MusicPlatform;
@@ -60,10 +61,10 @@ export interface SearchResult {
   tracks: OnlineSong[];
   errors: { platform: string; message: string }[];
 }
-export const MUSIC_PLATFORMS: [MusicPlatform, string][] = [
-  ['netease', '网易云音乐'],
-  ['qq', 'QQ Music'],
-  ['kugou', '酷狗音乐'],
-  ['apple', 'Apple Music'],
-];
+export const MUSIC_PLATFORMS: [MusicPlatform, string][] = catalog.map((info) => [info.id as MusicPlatform, info.label]);
+export function platformInfo(platform: string) {
+  const info = catalog.find((value) => value.id === platform);
+  if (!info) throw new Error('Unknown music platform');
+  return info;
+}
 export const songKey = (song: OnlineSong) => `${song.platform}:${song.id}`;

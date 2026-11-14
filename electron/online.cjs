@@ -80,6 +80,8 @@ async function start(ipcMain, getWin, library) {
       tasks.delete(id);
     }
   };
+  const openRemote = ({ key, playlistId }) =>
+    key ? platforms.open(track(key)) : platforms.open(null, library.remotePlaylist(playlistId));
   const operations = {
     state: () => ({ accounts: store.accounts(), folder: store.data.folder, jobs: downloads.view() }),
     folder: async () => {
@@ -114,12 +116,9 @@ async function start(ipcMain, getWin, library) {
       return value;
     },
     logout: async ({ platform }) => {
-      if (!PLATFORMS.includes(platform)) throw Error('Unknown music platform');
-      if (platform === 'apple') return apple.logout();
-      delete store.data.accounts[platform];
-      await store.save();
+      const value = await platforms.logout(platform);
       publish();
-      return store.accounts();
+      return value;
     },
     sync: ({ platform, jobId }) =>
       job(jobId, async (signal) => {
@@ -141,19 +140,21 @@ async function start(ipcMain, getWin, library) {
     enqueue: ({ keys, quality }) => {
       if (!Array.isArray(keys) || !keys.length || keys.length > 100) throw Error('Select 1–100 songs');
       const tracks = keys.map(track);
-      if (tracks.some((t) => t.platform === 'apple'))
-        throw Error('Apple Music offline downloads are managed by the official Apple Music app');
+      if (tracks.some((t) => !platforms.info(t.platform).download))
+        throw Error('This platform manages offline downloads in its official app');
       return downloads.add(tracks, quality);
     },
+    openRemote,
+    // Compatibility with the first draft; new callers use the provider-neutral operation.
     appleOpen: ({ key, playlistId }) => {
       if (key) {
         const song = track(key);
         if (song.platform !== 'apple') throw Error('Not an Apple Music song');
-        return apple.play(song);
+        return platforms.open(song);
       }
       const list = library.remotePlaylist(playlistId);
       if (list?.platform !== 'apple') throw Error('Not an Apple Music playlist');
-      return apple.play(null, list.id);
+      return platforms.open(null, list);
     },
     downloadAction: ({ id, action }) => downloads.action(id, action),
     lyrics: ({ key, jobId }) => job(jobId, (signal) => platforms.lyrics(track(key), signal)),

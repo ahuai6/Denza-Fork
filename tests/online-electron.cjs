@@ -101,7 +101,7 @@ const ROOT = path.resolve(__dirname, '..');
       const lists = await page.evaluate(() => window.cadenzaLib.get());
       const apple = lists.playlists.find((list) => list.remote?.platform === 'apple');
       await page.evaluate((playlistId) => window.cadenzaOnline.request('appleOpen', { playlistId }), apple.id);
-      await page.evaluate(() => window.cadenzaOnline.request('appleOpen', { key: 'apple:i.fixture' }));
+      await page.evaluate(() => window.cadenzaOnline.request('openRemote', { key: 'apple:i.fixture' }));
       assert.deepEqual(await app.evaluate(() => global.__appleTest.opened), [
         'https://music.apple.com/us/library/playlist/p.fixture',
         'https://music.apple.com/us/song/123',

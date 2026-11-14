@@ -238,7 +238,11 @@ describe('synced playlists in the existing library', () => {
       };
       vm.runInNewContext(fs.readFileSync(join(__dirname, '../../electron/library.cjs'), 'utf8'), {
         require: (name: string) =>
-          name === 'electron' ? { app: { getPath: () => dir }, protocol: { handle: () => {} } } : require(name),
+          name === 'electron'
+            ? { app: { getPath: () => dir }, protocol: { handle: () => {} } }
+            : name === './online/library-links.cjs'
+              ? require('../../electron/online/library-links.cjs')
+              : require(name),
         module: exports,
         process: { env: { CADENZA_USER_DATA: dir } },
         Buffer,

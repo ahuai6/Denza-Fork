@@ -46,3 +46,7 @@ AM 账号接口参考用户提供的 LyricsFlow Downloader 1.3.0 源码重写。
 ## 手动同步主仓库
 
 `upstream` 为 `ahuai6/Cadenza`，`origin` 为 `ahuai6/Denza-Fork`。仅在用户要求时更新 `upstream-main`，再把上游提交合并到 `custom` 并验证；不重置覆盖定制提交。此功能不添加定时同步，不修改主仓库。原项目的 main/space-mode 发布触发规则保持原样；本功能分支不自动发布安装包。
+
+## 后续开发与 API 更新
+
+下载、账号歌单、在线翻译和歌词匹配直接在 Denza-Fork 维护，不跟随 Sonora、SyncC 或 LyricsFlow 的后续功能提交。Cadenza 主程序及各底层 API/SDK 分开评估和更新，详见 [架构与维护边界](DENZA-ARCHITECTURE.md)；依赖只读检查使用 `npm run online:deps`。

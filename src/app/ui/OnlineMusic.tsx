@@ -4,9 +4,11 @@ import { tx } from '../../i18n';
 import { Online, type LibView } from '../bridge';
 import { lib, useStore, fmtTime } from '../state';
 import { playIds } from '../playback/player';
-import { online, request, jobId, openApple } from '../online/state';
+import { online, request, jobId } from '../online/state';
+import { openRemote } from '../actions/online';
 import {
   MUSIC_PLATFORMS,
+  platformInfo,
   songKey,
   type OnlineSong,
   type SearchResult,
@@ -158,6 +160,9 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
         }
       }
     });
+  const remoteHelp = result?.tracks
+    .map((song) => platformInfo(song.platform))
+    .find((info) => info.remotePlayback)?.playbackHelp;
   return (
     <div className={s.stack} data-test="online-search">
       <form
@@ -181,7 +186,7 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
       </form>
       {!onReferences && (
         <div className={s.toolbar}>
-          {platform !== 'apple' && (
+          {(platform === 'all' || platformInfo(platform).download) && (
             <>
               <QualityPicker value={quality} change={setQuality} />
               <Button disabled={!selected.length} onClick={() => void download(selected)}>
@@ -191,9 +196,7 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
           )}
         </div>
       )}
-      {!onReferences && result?.tracks.some((song) => song.platform === 'apple') && (
-        <Note>{tx('on.applePlaybackHelp')}</Note>
-      )}
+      {!onReferences && remoteHelp && <Note>{tx(remoteHelp)}</Note>}
       {error && <Note>{error}</Note>}
       {result?.errors.map((e) => (
         <Note key={e.platform}>
@@ -207,7 +210,7 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
             {!onReferences && (
               <input
                 type="checkbox"
-                disabled={song.platform === 'apple'}
+                disabled={!platformInfo(song.platform).download}
                 aria-label={song.title}
                 checked={selected.includes(songKey(song))}
                 onChange={(e) =>
@@ -221,26 +224,25 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
                 {song.artist} · {song.album} · {platformName(song.platform)} · {fmtTime(song.duration)}
               </small>
             </div>
-            <Button size="sm" disabled={busy || song.platform === 'apple'} onClick={() => void lyrics(song)}>
+            <Button size="sm" disabled={busy || !platformInfo(song.platform).lyrics} onClick={() => void lyrics(song)}>
               {tx('on.lyrics')}
             </Button>
-            {!onReferences && song.platform === 'apple' ? (
+            {!onReferences && platformInfo(song.platform).remotePlayback && (
               <Button
                 size="sm"
                 onClick={() =>
                   void act(async () => {
-                    await openApple({ key: songKey(song) });
+                    await openRemote({ key: songKey(song) });
                   })
                 }
               >
-                {tx('on.applePlay')}
+                {tx('on.playBrowser')}
               </Button>
-            ) : (
-              !onReferences && (
-                <Button size="sm" onClick={() => void download([songKey(song)])}>
-                  {tx('on.download')}
-                </Button>
-              )
+            )}
+            {!onReferences && platformInfo(song.platform).download && (
+              <Button size="sm" onClick={() => void download([songKey(song)])}>
+                {tx('on.download')}
+              </Button>
             )}
           </div>
         ))}
@@ -318,14 +320,14 @@ export function SyncedPlaylists() {
   const open = async (args: { key?: string; playlistId?: string }) => {
     setError('');
     try {
-      await openApple(args);
+      await openRemote(args);
     } catch (e) {
       setError(message(e));
     }
   };
   return (
     <div className={s.stack} data-test="synced-playlists">
-      <Note>{tx(remote?.platform === 'apple' ? 'on.appleSyncHelp' : 'on.syncHelp')}</Note>
+      <Note>{tx(remote ? platformInfo(remote.platform).syncHelp : 'on.syncHelp')}</Note>
       <div className={s.toolbar}>
         {accounts.map((a) => (
           <Button key={a.platform} disabled={busy} onClick={() => void sync(a.platform)}>
@@ -345,16 +347,21 @@ export function SyncedPlaylists() {
             options={playlists.map((p) => [p.id, `${p.name} · ${platformName(p.remote!.platform)}`])}
           />
           <div className={s.toolbar}>
-            {remote.platform !== 'apple' && <QualityPicker value={quality} change={setQuality} />}
+            {platformInfo(remote.platform).download && <QualityPicker value={quality} change={setQuality} />}
             <Button disabled={!selected.tracks.length} onClick={() => void playIds(selected.tracks, 0)}>
               {tx('on.playLocal')}
             </Button>
-            {remote.platform === 'apple' ? (
+            {platformInfo(remote.platform).remotePlayback && (
               <>
-                <Button onClick={() => void open({ playlistId: selected.id })}>{tx('on.applePlay')}</Button>
-                <Button onClick={() => setError(tx('on.applePlaybackHelp'))}>{tx('on.appleOffline')}</Button>
+                <Button onClick={() => void open({ playlistId: selected.id })}>{tx('on.playBrowser')}</Button>
+                {platformInfo(remote.platform).offlineLabel && (
+                  <Button onClick={() => setError(tx(platformInfo(remote.platform).playbackHelp!))}>
+                    {tx(platformInfo(remote.platform).offlineLabel!)}
+                  </Button>
+                )}
               </>
-            ) : (
+            )}
+            {platformInfo(remote.platform).download && (
               <Button
                 disabled={!remote.songs.some((song) => !song.localId)}
                 onClick={() => void download(remote.songs.filter((song) => !song.localId).slice(0, 100))}
@@ -375,7 +382,11 @@ export function SyncedPlaylists() {
                   <small>
                     {song.artist} ·{' '}
                     {tx(
-                      song.localId ? 'on.localSong' : song.platform === 'apple' ? 'on.remoteSong' : 'on.notDownloaded',
+                      song.localId
+                        ? 'on.localSong'
+                        : platformInfo(song.platform).remotePlayback
+                          ? 'on.remoteSong'
+                          : 'on.notDownloaded',
                     )}
                   </small>
                 </div>
@@ -386,14 +397,19 @@ export function SyncedPlaylists() {
                   >
                     {tx('s.play')}
                   </Button>
-                ) : song.platform === 'apple' ? (
-                  <Button size="sm" onClick={() => void open({ key: songKey(song) })}>
-                    {tx('on.applePlay')}
-                  </Button>
                 ) : (
-                  <Button size="sm" onClick={() => void download([song])}>
-                    {tx('on.download')}
-                  </Button>
+                  <>
+                    {platformInfo(song.platform).remotePlayback && (
+                      <Button size="sm" onClick={() => void open({ key: songKey(song) })}>
+                        {tx('on.playBrowser')}
+                      </Button>
+                    )}
+                    {platformInfo(song.platform).download && (
+                      <Button size="sm" onClick={() => void download([song])}>
+                        {tx('on.download')}
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             ))}
@@ -452,7 +468,7 @@ function Accounts() {
         }}
         options={MUSIC_PLATFORMS}
       />
-      <Note>{tx(platform === 'apple' ? 'on.appleHelp' : 'on.accountHelp')}</Note>
+      <Note>{tx(platformInfo(platform).accountHelp)}</Note>
       <div className={s.toolbar}>
         <Button
           disabled={busy}
@@ -470,7 +486,7 @@ function Accounts() {
             })
           }
         >
-          {tx(platform === 'apple' ? 'on.appleSignin' : 'on.signin')}
+          {tx(platformInfo(platform).loginLabel)}
         </Button>
         {login?.sessionId && (
           <Button
@@ -494,7 +510,7 @@ function Accounts() {
         )}
       </div>
       {login?.image && <img className={s.qr} src={login.image} alt={tx('on.signin')} />}
-      {platform !== 'apple' && (
+      {platformInfo(platform).credentialImport && (
         <details>
           <summary>{tx('on.importAccount')}</summary>
           <div className={s.stack}>

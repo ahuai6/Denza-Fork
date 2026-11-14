@@ -18,7 +18,7 @@ add({
     'Apple Music 로그인',
     'Acceder a Apple Music',
   ],
-  'on.applePlay': [
+  'on.playBrowser': [
     '在瀏覽器播放',
     '在浏览器播放',
     'Play in browser',

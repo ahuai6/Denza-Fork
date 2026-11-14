@@ -1,3 +1,9 @@
+## Denza-Fork 开发维护调整
+
+- 平台协议拆为独立适配器，共享入口按平台能力显示，便于单独跟进 API 变化。
+- 明确下载、翻译及歌词匹配由 Denza-Fork 维护，Cadenza 主程序和底层 SDK 分别更新。
+- 修复 SDK 返回字符串下载直链时 URL 被截断的问题，增加适配器契约与依赖检查。
+
 ## Denza-Fork 首版追加：Apple Music
 
 - Apple Music 加入统一的在线音乐平台与账号入口，使用 Apple 官方窗口登录。

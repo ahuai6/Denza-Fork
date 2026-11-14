@@ -9,8 +9,8 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit -p .",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"electron/*.cjs\" \"tests/**/*.{ts,cjs}\" \"scripts/*.mjs\" \"*.ts\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"electron/*.cjs\" \"tests/**/*.{ts,cjs}\" \"scripts/*.mjs\" \"*.ts\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"electron/**/*.cjs\" \"tests/**/*.{ts,cjs}\" \"scripts/*.mjs\" \"*.ts\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"electron/**/*.cjs\" \"tests/**/*.{ts,cjs}\" \"scripts/*.mjs\" \"*.ts\"",
     "test": "vitest run",
     "build:web": "vite build --mode web",
     "build:app": "vite build --mode app && node scripts/fonts.mjs dist-app/fonts",
@@ -25,7 +25,9 @@
     "models": "node scripts/models.mjs",
     "test:neural": "node tests/neural.cjs",
     "dist:win": "npm run build:app && npm run build:native && node scripts/models.mjs && electron-builder --win --x64",
-    "fonts:coverage": "node scripts/font-coverage.mjs"
+    "fonts:coverage": "node scripts/font-coverage.mjs",
+    "online:deps": "node scripts/online-deps.mjs",
+    "online:deps:check": "node scripts/online-deps.mjs --check"
   },
   "build": {
     "appId": "app.cadenza.desktop",
@@ -39,7 +41,8 @@
       "package.json",
       "!node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**",
       "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**",
-      "vendor/kugou/**"
+      "vendor/kugou/**",
+      "shared/**"
     ],
     "asarUnpack": [
       "node_modules/onnxruntime-node/bin/**",

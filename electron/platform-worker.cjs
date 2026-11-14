@@ -8,12 +8,7 @@ const { parentPort, workerData } = require('node:worker_threads');
     process.env.DEBUG = 'false';
     process.env.LOG_LEVEL = 'error';
     process.env.DOTENV_CONFIG_QUIET = 'true';
-    const sdk =
-      platform === 'netease'
-        ? require('@neteasecloudmusicapienhanced/api')
-        : platform === 'qq'
-          ? await import('@sansenjian/qq-music-api/services')
-          : require('kugoumusicapi');
+    const sdk = await require('./online/sdk-loaders.cjs').loadSDK(platform);
     if (typeof sdk[method] !== 'function') throw Error('Platform operation unavailable');
     parentPort.postMessage({ value: await sdk[method](query) });
   } catch (e) {

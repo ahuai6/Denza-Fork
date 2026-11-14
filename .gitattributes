@@ -1,0 +1,2 @@
+# Preserve vendored source bytes and its recorded fingerprint on Windows as well as Linux.
+vendor/kugou/** -text
