@@ -1,6 +1,55 @@
 import { add } from '../../i18n';
 // Shared by the classic library, space panels and workshop.
 add({
+  'on.appleSyncHelp': [
+    '手動取得歌單；已配對的本機歌曲可直接播放。',
+    '手动获取歌单；已匹配的本地歌曲可直接播放。',
+    'Sync manually; matched local songs play here.',
+    '手動で同期。対応するローカル曲はここで再生できます。',
+    '수동으로 동기화합니다. 연결된 로컬 곡은 여기서 재생됩니다.',
+    'Sincroniza manualmente; reproduce aquí las canciones locales vinculadas.',
+  ],
+  'on.remoteSong': ['遠端歌曲', '远端歌曲', 'Remote song', 'オンラインの曲', '원격 곡', 'Canción remota'],
+  'on.appleSignin': [
+    '登入 Apple Music',
+    '登录 Apple Music',
+    'Sign in to Apple Music',
+    'Apple Music にログイン',
+    'Apple Music 로그인',
+    'Acceder a Apple Music',
+  ],
+  'on.applePlay': [
+    '在瀏覽器播放',
+    '在浏览器播放',
+    'Play in browser',
+    'ブラウザで再生',
+    '브라우저에서 재생',
+    'Reproducir en navegador',
+  ],
+  'on.appleOffline': [
+    '離線下載說明',
+    '离线下载说明',
+    'Offline download help',
+    'オフライン保存について',
+    '오프라인 다운로드 안내',
+    'Ayuda de descarga sin conexión',
+  ],
+  'on.appleHelp': [
+    '在 Apple 官方視窗登入，回來確認並同步歌單。',
+    '在 Apple 官方窗口登录，回来确认并同步歌单。',
+    'Sign in in the Apple window, then confirm here and sync playlists.',
+    'Apple の画面でログイン後、ここで確認して同期。',
+    'Apple 창에서 로그인한 후 여기서 확인하고 동기화하세요.',
+    'Accede en la ventana de Apple y confirma aquí para sincronizar.',
+  ],
+  'on.applePlaybackHelp': [
+    '遠端歌曲在瀏覽器播放；離線下載請用 Apple Music 官方 App。',
+    '远端歌曲在浏览器播放；离线下载请用 Apple Music 官方 App。',
+    'Remote songs play in your browser. Use the official Apple Music app for offline downloads.',
+    '楽曲はブラウザで再生。オフライン保存は公式 Apple Music アプリで。',
+    '원격 곡은 브라우저에서 재생합니다. 오프라인 저장은 공식 Apple Music 앱을 이용하세요.',
+    'Reproduce en el navegador. Para descargas sin conexión, usa la app oficial de Apple Music.',
+  ],
   'on.title': ['線上音樂', '在线音乐', 'Online music', 'オンライン音楽', '온라인 음악', 'Música en línea'],
   'on.synced': [
     '同步歌單',

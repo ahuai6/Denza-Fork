@@ -2,7 +2,7 @@ const { Worker } = require('node:worker_threads');
 const path = require('node:path');
 const { randomUUID, randomBytes } = require('node:crypto');
 const QRCode = require('qrcode');
-const PLATFORMS = ['netease', 'qq', 'kugou'];
+const PLATFORMS = ['netease', 'qq', 'kugou', 'apple'];
 const first = (o, paths, fallback = '') => {
   for (const p of paths) {
     const v = p.split('.').reduce((a, k) => a?.[k], o);
@@ -85,9 +85,10 @@ function sdk(platform, method, query, signal) {
   });
 }
 class Platforms {
-  constructor(store, invoke = sdk) {
+  constructor(store, invoke = sdk, apple = null) {
     this.store = store;
     this.invoke = invoke;
+    this.apple = apple;
     this.sessions = new Map();
   }
   async call(platform, method, params = {}, signal, override) {
@@ -145,6 +146,7 @@ class Platforms {
       page > 100
     )
       throw Error('Invalid search');
+    if (platform === 'apple') return this.apple.search(query, page, signal);
     let b, rows;
     if (platform === 'netease') {
       b = await this.call(
@@ -166,6 +168,7 @@ class Platforms {
     return rows.map((r) => song(r, platform)).filter((r) => r.id && r.title);
   }
   async account(platform, cookie, uid = '') {
+    if (platform === 'apple') throw Error('Use the Apple Music sign-in window');
     if (!PLATFORMS.includes(platform) || typeof cookie !== 'string' || !cookie.trim() || cookie.length > 50000)
       throw Error('Invalid account credentials');
     const c = cookies(cookie);
@@ -186,6 +189,7 @@ class Platforms {
   }
   async login(platform, action, id) {
     if (!PLATFORMS.includes(platform)) throw Error('Unknown music platform');
+    if (platform === 'apple') return this.apple.login(action);
     if (action === 'cancel') {
       this.sessions.delete(id);
       return { done: false };
@@ -243,6 +247,7 @@ class Platforms {
     return { done: true };
   }
   async page(platform, kind, id, page, signal) {
+    if (platform === 'apple') return this.apple.page(kind, id, page, signal);
     const uid = this.store.credential(platform).uid;
     if (!uid) throw Error('Sign in first');
     const n = 100,
@@ -306,6 +311,8 @@ class Platforms {
     };
   }
   async resolve(track, quality, signal) {
+    if (track.platform === 'apple')
+      throw Error('Apple Music offline downloads are managed by the official Apple Music app');
     const levels = { standard: 'standard', high: 'exhigh', lossless: 'lossless', hires: 'hires' };
     if (!levels[quality]) throw Error('Unknown quality');
     let b, row;
@@ -349,6 +356,7 @@ class Platforms {
     return { url: url.href };
   }
   async lyrics(track, signal) {
+    if (track.platform === 'apple') throw Error('Apple Music lyrics are available in the official player');
     let b;
     if (track.platform === 'netease') {
       b = await this.call('netease', 'lyric', { id: track.id }, signal);

@@ -19,7 +19,32 @@ const ROOT = path.resolve(__dirname, '..');
       folders: [path.join(__dirname, '.cache/lib')],
       tracks: {},
       favorites: [],
-      playlists: [],
+      playlists: [
+        {
+          id: 'apple-fixture',
+          name: 'Apple fixture',
+          created: 1,
+          tracks: [],
+          remote: {
+            platform: 'apple',
+            uid: 'fixture-user',
+            id: 'p.fixture',
+            updated: 1,
+            songs: [
+              {
+                platform: 'apple',
+                id: 'i.fixture',
+                catalogId: '123',
+                storefront: 'us',
+                title: 'Apple fixture',
+                artist: 'Artist',
+                album: '',
+                duration: 180,
+              },
+            ],
+          },
+        },
+      ],
       overrides: {},
     }),
   );
@@ -59,6 +84,44 @@ const ROOT = path.resolve(__dirname, '..');
       false,
     );
     console.log('pass real IPC, clean online state, restricted operation and bundled Codex runtime/model list');
+    await app.evaluate(({ shell }) => {
+      const previous = shell.openExternal;
+      const opened = [];
+      shell.openExternal = async (url) => {
+        opened.push(url);
+      };
+      global.__appleTest = {
+        opened,
+        restore: () => {
+          shell.openExternal = previous;
+        },
+      };
+    });
+    try {
+      const lists = await page.evaluate(() => window.cadenzaLib.get());
+      const apple = lists.playlists.find((list) => list.remote?.platform === 'apple');
+      await page.evaluate((playlistId) => window.cadenzaOnline.request('appleOpen', { playlistId }), apple.id);
+      await page.evaluate(() => window.cadenzaOnline.request('appleOpen', { key: 'apple:i.fixture' }));
+      assert.deepEqual(await app.evaluate(() => global.__appleTest.opened), [
+        'https://music.apple.com/us/library/playlist/p.fixture',
+        'https://music.apple.com/us/song/123',
+      ]);
+      assert.equal(
+        await page.evaluate(() =>
+          window.cadenzaOnline.request('enqueue', { keys: ['apple:i.fixture'], quality: 'lossless' }).then(
+            () => false,
+            () => true,
+          ),
+        ),
+        true,
+      );
+      console.log('pass Apple playlist IPC and official playback links; protected download requests rejected');
+    } finally {
+      await app.evaluate(() => {
+        global.__appleTest.restore();
+        delete global.__appleTest;
+      });
+    }
     await page.evaluate(async () => {
       const c = window.__cadenza;
       const id = c.lib.get().tracks.find((t) => !t.protected && t.lrc).id;

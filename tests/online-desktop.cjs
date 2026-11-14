@@ -76,10 +76,38 @@ function bridge() {
           model: 'fixture',
           hasKey: false,
         };
-      if (op === 'search') return { tracks: [song], errors: [] };
+      if (op === 'search')
+        return {
+          tracks: [
+            {
+              ...song,
+              ...(args.platform === 'apple'
+                ? { platform: 'apple', id: '123', catalogId: '123', title: 'Apple fixture' }
+                : {}),
+            },
+          ],
+          errors: [],
+        };
       if (op === 'lyrics')
         return { original: '[00:01]First line\n[00:04]Second line', translation: '[00:01]第一句\n[00:04]第二句' };
       if (op === 'sync') {
+        if (args.platform === 'apple') {
+          local.playlists.push({
+            id: 'apple-list',
+            name: 'Apple fixture playlist',
+            created: 1,
+            tracks: [],
+            remote: {
+              platform: 'apple',
+              uid: 'apple-user',
+              id: 'p.apple',
+              updated: Date.now(),
+              songs: [{ ...song, platform: 'apple', id: 'i.apple', catalogId: '123', title: 'Apple fixture' }],
+            },
+          });
+          libraryChanged(local);
+          return local;
+        }
         local.playlists = [
           local.playlists[0],
           {
@@ -107,6 +135,14 @@ function bridge() {
         return state.jobs;
       }
       if (op === 'translate') return args.input.wanted.map((id) => ({ id, translation: '模型测试译文' }));
+      if (op === 'login' && args.platform === 'apple') {
+        if (args.action === 'create') return { done: false, sessionId: 'apple-window' };
+        if (args.action === 'poll') {
+          state.accounts.push({ platform: 'apple', uid: 'apple-user', name: 'Apple Music fixture' });
+          changed({ ...state });
+        }
+        return { done: true };
+      }
       if (op === 'login')
         return args.action === 'create'
           ? {
@@ -167,6 +203,42 @@ function bridge() {
     await music.getByRole('img', { name: '扫码登录', exact: true }).waitFor();
     await music.getByRole('button', { name: '确认登录', exact: true }).click();
     console.log('pass account QR creation and confirmation UI');
+    await music.locator('[data-test="online-accounts"]').getByRole('combobox').click();
+    await page.getByRole('option', { name: 'Apple Music', exact: true }).click();
+    await music.getByRole('button', { name: '登录 Apple Music', exact: true }).click();
+    assert.equal(await music.getByRole('img').count(), 0);
+    assert.equal(await music.locator('details').count(), 0);
+    await music.getByRole('button', { name: '确认登录', exact: true }).click();
+    await music.getByText('Apple Music fixture', { exact: true }).waitFor();
+    await music.getByRole('button', { name: '同步歌单', exact: true }).click();
+    await music.getByRole('button', { name: /同步歌单 · Apple Music fixture/ }).click();
+    await music
+      .locator('[data-test="synced-playlists"]')
+      .getByRole('combobox', { name: '同步歌单', exact: true })
+      .click();
+    await page.getByRole('option', { name: /Apple fixture playlist/ }).click();
+    assert.equal(await music.getByRole('button', { name: '下载歌曲', exact: true }).count(), 0);
+    await music.getByRole('button', { name: '在浏览器播放', exact: true }).first().click();
+    await music.getByRole('button', { name: '离线下载说明', exact: true }).click();
+    await page.screenshot({ path: path.join(shots, 'apple-playlists.png') });
+    await music.getByRole('navigation').getByRole('button', { name: '搜索歌曲', exact: true }).click();
+    await music.getByRole('combobox', { name: '全部平台', exact: true }).click();
+    await page.getByRole('option', { name: 'Apple Music', exact: true }).click();
+    await music.getByRole('textbox', { name: '搜索歌曲', exact: true }).fill('apple');
+    await music.locator('form').getByRole('button', { name: '搜索歌曲', exact: true }).click();
+    await music.getByText('Apple fixture', { exact: true }).waitFor();
+    assert.equal(await music.getByRole('checkbox', { name: 'Apple fixture', exact: true }).isDisabled(), true);
+    await music.getByRole('button', { name: '在浏览器播放', exact: true }).click();
+    const appleCalls = await page.evaluate(() => window.__onlineCalls.filter((c) => c.op === 'appleOpen'));
+    assert(appleCalls.some((c) => c.args.playlistId === 'apple-list'));
+    assert(appleCalls.some((c) => c.args.key === 'apple:123'));
+    assert.equal(
+      await page.evaluate(() =>
+        window.__onlineCalls.some((c) => c.op === 'enqueue' && c.args.keys.some((key) => key.startsWith('apple:'))),
+      ),
+      false,
+    );
+    console.log('pass Apple sign-in, unified playlists/search and official playback without protected downloads');
     await page.locator('[data-page="workshop"]').click();
     await page.waitForFunction(() => window.__cadenza?.workshop?.get().session);
     await page.evaluate(async () => {

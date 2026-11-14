@@ -138,5 +138,8 @@ Windows 安裝程式是 Cadenza 自己畫的三頁（`build/installer.nsh`，圖
 | 翻译与匹配 | Translate and match | 整曲翻译、参考译文与逐行校对入口 |
 | 应用到草稿 | Apply to draft | 只更新编辑内容，之后由原编辑器保存 |
 | 期望音质 | Requested quality | 请求的规格；与文件实测规格区分 |
+| 在浏览器播放 | Play in browser | 在官方播放器播放远端歌曲，与本地播放区别 |
+| 离线下载说明 | Offline download help | 指引用户使用平台官方 App 离线保存 |
+| 远端歌曲 | Remote song | 尚未关联本地音频的在线歌曲 |
 
 新增界面文字的六语言对照集中在 `src/app/online/words.ts`，两种界面与工坊共用。

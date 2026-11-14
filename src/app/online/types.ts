@@ -1,4 +1,4 @@
-export type MusicPlatform = 'netease' | 'qq' | 'kugou';
+export type MusicPlatform = 'netease' | 'qq' | 'kugou' | 'apple';
 export interface OnlineSong {
   platform: MusicPlatform;
   id: string;
@@ -10,6 +10,8 @@ export interface OnlineSong {
   albumAudioId?: string;
   mediaId?: string;
   localId?: string | null;
+  catalogId?: string;
+  storefront?: string;
 }
 export interface RemotePlaylist {
   platform: MusicPlatform;
@@ -62,5 +64,6 @@ export const MUSIC_PLATFORMS: [MusicPlatform, string][] = [
   ['netease', '网易云音乐'],
   ['qq', 'QQ Music'],
   ['kugou', '酷狗音乐'],
+  ['apple', 'Apple Music'],
 ];
 export const songKey = (song: OnlineSong) => `${song.platform}:${song.id}`;

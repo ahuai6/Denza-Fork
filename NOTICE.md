@@ -62,3 +62,5 @@ Cadenza 以 **GNU Affero General Public License v3.0**（AGPL-3.0-only）發佈�
 Music platform protocol libraries: `@neteasecloudmusicapienhanced/api`, `@sansenjian/qq-music-api`, and KuGouMusicApi (MIT). The KuGouMusicApi 1.6.3 source snapshot is retained under `vendor/kugou`, including its license, from the same snapshot used by ahuai6/Sonora at 904f36081eda380b52bed1ddf2346387e1bc207f. It is used as a library, without starting its HTTP server.
 
 QR images use `qrcode` (MIT). Codex OAuth and text generation use the official `@openai/codex` runtime (Apache-2.0); its license is retained as `licenses/OpenAI-Codex.txt`. No Sonora or SyncC UI, player or audio-container implementation is embedded in this application.
+
+Apple Music account/catalog behavior in `electron/apple-music.cjs` is rewritten with reference to the user's supplied LyricsFlow Downloader 1.3.0 source (declared MIT in its package metadata). Its UI, player, audio download/decryption backend and tagging pipeline are not embedded. Apple Music is a trademark of Apple Inc.; this application is not affiliated with Apple.

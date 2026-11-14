@@ -3,6 +3,7 @@ const { OnlineStore } = require('./online-store.cjs');
 const { Platforms, PLATFORMS } = require('./platforms.cjs');
 const { Downloads } = require('./downloads.cjs');
 const { Translator, CodexText } = require('./translation-service.cjs');
+const { AppleMusic, appleFetch } = require('./apple-music.cjs');
 
 // Fetch the complete snapshot before changing any saved playlist. Repeated/partial pages never erase the old copy.
 async function collectPages(read, signal) {
@@ -33,10 +34,15 @@ async function collectPages(read, signal) {
   throw Error('Playlist exceeds the supported size; previous copy retained');
 }
 async function start(ipcMain, getWin, library) {
-  const { app, dialog, shell, safeStorage } = require('electron');
+  const { app, dialog, shell, safeStorage, net } = require('electron');
   const store = new OnlineStore(path.join(app.getPath('userData'), 'online.json'), safeStorage);
   await store.load();
-  const platforms = new Platforms(store);
+  const apple = new AppleMusic(
+    store,
+    () => publish(),
+    (url, options) => appleFetch(net, url, options),
+  );
+  const platforms = new Platforms(store, undefined, apple);
   const candidates = new Map(),
     tasks = new Map();
   const keyOf = (track) => `${track.platform}:${track.id}`;
@@ -109,6 +115,7 @@ async function start(ipcMain, getWin, library) {
     },
     logout: async ({ platform }) => {
       if (!PLATFORMS.includes(platform)) throw Error('Unknown music platform');
+      if (platform === 'apple') return apple.logout();
       delete store.data.accounts[platform];
       await store.save();
       publish();
@@ -133,7 +140,20 @@ async function start(ipcMain, getWin, library) {
       }),
     enqueue: ({ keys, quality }) => {
       if (!Array.isArray(keys) || !keys.length || keys.length > 100) throw Error('Select 1–100 songs');
-      return downloads.add(keys.map(track), quality);
+      const tracks = keys.map(track);
+      if (tracks.some((t) => t.platform === 'apple'))
+        throw Error('Apple Music offline downloads are managed by the official Apple Music app');
+      return downloads.add(tracks, quality);
+    },
+    appleOpen: ({ key, playlistId }) => {
+      if (key) {
+        const song = track(key);
+        if (song.platform !== 'apple') throw Error('Not an Apple Music song');
+        return apple.play(song);
+      }
+      const list = library.remotePlaylist(playlistId);
+      if (list?.platform !== 'apple') throw Error('Not an Apple Music playlist');
+      return apple.play(null, list.id);
     },
     downloadAction: ({ id, action }) => downloads.action(id, action),
     lyrics: ({ key, jobId }) => job(jobId, (signal) => platforms.lyrics(track(key), signal)),
@@ -164,6 +184,7 @@ async function start(ipcMain, getWin, library) {
   return {
     async close() {
       for (const c of tasks.values()) c.abort();
+      apple.close();
       codex.close();
       await downloads.close();
     },

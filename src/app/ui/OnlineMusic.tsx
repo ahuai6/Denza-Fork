@@ -4,7 +4,7 @@ import { tx } from '../../i18n';
 import { Online, type LibView } from '../bridge';
 import { lib, useStore, fmtTime } from '../state';
 import { playIds } from '../playback/player';
-import { online, request, jobId } from '../online/state';
+import { online, request, jobId, openApple } from '../online/state';
 import {
   MUSIC_PLATFORMS,
   songKey,
@@ -181,11 +181,18 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
       </form>
       {!onReferences && (
         <div className={s.toolbar}>
-          <QualityPicker value={quality} change={setQuality} />
-          <Button disabled={!selected.length} onClick={() => void download(selected)}>
-            {tx('on.selected')} ({selected.length})
-          </Button>
+          {platform !== 'apple' && (
+            <>
+              <QualityPicker value={quality} change={setQuality} />
+              <Button disabled={!selected.length} onClick={() => void download(selected)}>
+                {tx('on.selected')} ({selected.length})
+              </Button>
+            </>
+          )}
         </div>
+      )}
+      {!onReferences && result?.tracks.some((song) => song.platform === 'apple') && (
+        <Note>{tx('on.applePlaybackHelp')}</Note>
       )}
       {error && <Note>{error}</Note>}
       {result?.errors.map((e) => (
@@ -200,6 +207,7 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
             {!onReferences && (
               <input
                 type="checkbox"
+                disabled={song.platform === 'apple'}
                 aria-label={song.title}
                 checked={selected.includes(songKey(song))}
                 onChange={(e) =>
@@ -213,13 +221,26 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
                 {song.artist} · {song.album} · {platformName(song.platform)} · {fmtTime(song.duration)}
               </small>
             </div>
-            <Button size="sm" disabled={busy} onClick={() => void lyrics(song)}>
+            <Button size="sm" disabled={busy || song.platform === 'apple'} onClick={() => void lyrics(song)}>
               {tx('on.lyrics')}
             </Button>
-            {!onReferences && (
-              <Button size="sm" onClick={() => void download([songKey(song)])}>
-                {tx('on.download')}
+            {!onReferences && song.platform === 'apple' ? (
+              <Button
+                size="sm"
+                onClick={() =>
+                  void act(async () => {
+                    await openApple({ key: songKey(song) });
+                  })
+                }
+              >
+                {tx('on.applePlay')}
               </Button>
+            ) : (
+              !onReferences && (
+                <Button size="sm" onClick={() => void download([songKey(song)])}>
+                  {tx('on.download')}
+                </Button>
+              )
             )}
           </div>
         ))}
@@ -294,9 +315,17 @@ export function SyncedPlaylists() {
       setError(message(e));
     }
   };
+  const open = async (args: { key?: string; playlistId?: string }) => {
+    setError('');
+    try {
+      await openApple(args);
+    } catch (e) {
+      setError(message(e));
+    }
+  };
   return (
     <div className={s.stack} data-test="synced-playlists">
-      <Note>{tx('on.syncHelp')}</Note>
+      <Note>{tx(remote?.platform === 'apple' ? 'on.appleSyncHelp' : 'on.syncHelp')}</Note>
       <div className={s.toolbar}>
         {accounts.map((a) => (
           <Button key={a.platform} disabled={busy} onClick={() => void sync(a.platform)}>
@@ -316,16 +345,23 @@ export function SyncedPlaylists() {
             options={playlists.map((p) => [p.id, `${p.name} · ${platformName(p.remote!.platform)}`])}
           />
           <div className={s.toolbar}>
-            <QualityPicker value={quality} change={setQuality} />
+            {remote.platform !== 'apple' && <QualityPicker value={quality} change={setQuality} />}
             <Button disabled={!selected.tracks.length} onClick={() => void playIds(selected.tracks, 0)}>
               {tx('on.playLocal')}
             </Button>
-            <Button
-              disabled={!remote.songs.some((song) => !song.localId)}
-              onClick={() => void download(remote.songs.filter((song) => !song.localId).slice(0, 100))}
-            >
-              {tx('on.download')} (≤100)
-            </Button>
+            {remote.platform === 'apple' ? (
+              <>
+                <Button onClick={() => void open({ playlistId: selected.id })}>{tx('on.applePlay')}</Button>
+                <Button onClick={() => setError(tx('on.applePlaybackHelp'))}>{tx('on.appleOffline')}</Button>
+              </>
+            ) : (
+              <Button
+                disabled={!remote.songs.some((song) => !song.localId)}
+                onClick={() => void download(remote.songs.filter((song) => !song.localId).slice(0, 100))}
+              >
+                {tx('on.download')} (≤100)
+              </Button>
+            )}
           </div>
           <small>
             {new Date(remote.updated).toLocaleString()} · {selected.tracks.length}/{remote.songs.length}
@@ -337,7 +373,10 @@ export function SyncedPlaylists() {
                 <div className={s.info}>
                   <b>{song.title}</b>
                   <small>
-                    {song.artist} · {tx(song.localId ? 'on.localSong' : 'on.notDownloaded')}
+                    {song.artist} ·{' '}
+                    {tx(
+                      song.localId ? 'on.localSong' : song.platform === 'apple' ? 'on.remoteSong' : 'on.notDownloaded',
+                    )}
                   </small>
                 </div>
                 {song.localId ? (
@@ -346,6 +385,10 @@ export function SyncedPlaylists() {
                     onClick={() => void playIds(selected.tracks, selected.tracks.indexOf(song.localId!))}
                   >
                     {tx('s.play')}
+                  </Button>
+                ) : song.platform === 'apple' ? (
+                  <Button size="sm" onClick={() => void open({ key: songKey(song) })}>
+                    {tx('on.applePlay')}
                   </Button>
                 ) : (
                   <Button size="sm" onClick={() => void download([song])}>
@@ -369,8 +412,10 @@ function Accounts() {
   const [cookie, setCookie] = useState(''),
     [uid, setUid] = useState('');
   const current = useRef<{ platform: MusicPlatform; id: string } | null>(null);
+  const mounted = useRef(true);
   useEffect(
     () => () => {
+      mounted.current = false;
       if (current.current)
         void request('login', { platform: current.current.platform, action: 'cancel', sessionId: current.current.id });
     },
@@ -382,9 +427,9 @@ function Accounts() {
     try {
       await fn();
     } catch (e) {
-      setError(message(e));
+      if (mounted.current) setError(message(e));
     } finally {
-      setBusy(false);
+      if (mounted.current) setBusy(false);
     }
   };
   return (
@@ -407,7 +452,7 @@ function Accounts() {
         }}
         options={MUSIC_PLATFORMS}
       />
-      <Note>{tx('on.accountHelp')}</Note>
+      <Note>{tx(platform === 'apple' ? 'on.appleHelp' : 'on.accountHelp')}</Note>
       <div className={s.toolbar}>
         <Button
           disabled={busy}
@@ -416,12 +461,16 @@ function Accounts() {
               if (current.current)
                 await request('login', { platform, action: 'cancel', sessionId: current.current.id });
               const value = await request<LoginState>('login', { platform, action: 'create' });
+              if (!mounted.current) {
+                if (value.sessionId) await request('login', { platform, action: 'cancel', sessionId: value.sessionId });
+                return;
+              }
               setLogin(value);
-              current.current = { platform, id: value.sessionId! };
+              current.current = value.sessionId ? { platform, id: value.sessionId } : null;
             })
           }
         >
-          {tx('on.signin')}
+          {tx(platform === 'apple' ? 'on.appleSignin' : 'on.signin')}
         </Button>
         {login?.sessionId && (
           <Button
@@ -445,30 +494,32 @@ function Accounts() {
         )}
       </div>
       {login?.image && <img className={s.qr} src={login.image} alt={tx('on.signin')} />}
-      <details>
-        <summary>{tx('on.importAccount')}</summary>
-        <div className={s.stack}>
-          <label>
-            {tx('on.uid')}
-            <input value={uid} onChange={(e) => setUid(e.target.value)} />
-          </label>
-          <label>
-            {tx('on.cookie')}
-            <input type="password" autoComplete="off" value={cookie} onChange={(e) => setCookie(e.target.value)} />
-          </label>
-          <Button
-            disabled={busy || !cookie.trim()}
-            onClick={() =>
-              void act(async () => {
-                await request('account', { platform, cookie, uid });
-                setCookie('');
-              })
-            }
-          >
-            {tx('on.importAccount')}
-          </Button>
-        </div>
-      </details>
+      {platform !== 'apple' && (
+        <details>
+          <summary>{tx('on.importAccount')}</summary>
+          <div className={s.stack}>
+            <label>
+              {tx('on.uid')}
+              <input value={uid} onChange={(e) => setUid(e.target.value)} />
+            </label>
+            <label>
+              {tx('on.cookie')}
+              <input type="password" autoComplete="off" value={cookie} onChange={(e) => setCookie(e.target.value)} />
+            </label>
+            <Button
+              disabled={busy || !cookie.trim()}
+              onClick={() =>
+                void act(async () => {
+                  await request('account', { platform, cookie, uid });
+                  setCookie('');
+                })
+              }
+            >
+              {tx('on.importAccount')}
+            </Button>
+          </div>
+        </details>
+      )}
       {error && <Note>{error}</Note>}
       {accounts.map((a) => (
         <div className={s.row} key={a.platform}>

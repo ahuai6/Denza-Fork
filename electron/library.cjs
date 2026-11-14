@@ -1451,6 +1451,7 @@ module.exports = {
   importDownload,
   syncPlaylists,
   remoteSong: (key) => db.playlists.flatMap((p) => p.remote?.songs || []).find((s) => `${s.platform}:${s.id}` === key),
+  remotePlaylist: (id) => db.playlists.find((p) => p.id === id)?.remote,
   scheme: {
     scheme: 'cadenza',
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true },
