@@ -1,4 +1,5 @@
 import type { SettingValues } from './settings/schema';
+import type { OnlineApi, RemotePlaylist } from './online/types';
 // What the page may ask the desktop for (electron/preload.cjs), typed. In the web build there is no desktop: files are
 // handed over as downloads and nothing else exists.
 
@@ -56,6 +57,7 @@ export interface Playlist {
   name: string;
   created: number;
   tracks: string[];
+  remote?: RemotePlaylist;
 }
 export interface LibView {
   folders: string[];
@@ -192,6 +194,7 @@ export const D: DesktopApi | null = W.cadenzaDesktop ?? null;
 export const Lib: LibApi | null = W.cadenzaLib ?? null;
 export const AudioOut: AudioApi | null = W.cadenzaAudio ?? null;
 export const Infer: InferApi | null = W.cadenzaInfer ?? null;
+export const Online: OnlineApi | null = W.cadenzaOnline ?? null;
 export const desktop = !!D;
 
 export const coverUrl = (key: string | null | undefined, full = false) =>

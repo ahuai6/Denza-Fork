@@ -32,6 +32,7 @@ import {
   queueImport,
 } from '../../workshop/project';
 import s from './Workshop.module.css';
+import { TranslationEditor } from '../../ui/TranslationEditor';
 
 const TABS: [string, string, string][] = [
   ['lyrics', 'tab.lyrics', 'lyrics'],
@@ -443,6 +444,8 @@ function Timeline({ s: ss }: { s: Session }) {
 }
 
 function LyricsPane({ s: ss }: { s: Session }) {
+  const [translating, setTranslating] = useState(false);
+  useEffect(() => setTranslating(false), [ss]);
   const st = useStore(ws, (x) => x.status),
     audioName = useStore(ws, (x) => x.audioName),
     analyzing = useStore(ws, (x) => x.analyzing);
@@ -495,6 +498,22 @@ function LyricsPane({ s: ss }: { s: Session }) {
           <p>{tx('lyr.auto')}</p>
         </details>
         <CueBar target={ta} />
+        {desktop && (
+          <Button disabled={!text.trim()} onClick={() => setTranslating(true)}>
+            {tx('tr.title')}
+          </Button>
+        )}
+        {translating && (
+          <TranslationEditor
+            source={text}
+            song={{ title: ss.spec.song.title || '', artist: ss.spec.song.artist || '', album: '' }}
+            apply={(value) => {
+              editing.current = true;
+              setText(value);
+            }}
+            close={() => setTranslating(false)}
+          />
+        )}
         <textarea
           ref={ta}
           className={s.lyrics}

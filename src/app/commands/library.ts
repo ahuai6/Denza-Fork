@@ -61,7 +61,7 @@ define({
   // (a menu of the playlists there are, and a new one — which needs the interface to ask its name)
   when: (_t, h) => !!h.ask,
   sub: (t, h) => {
-    const pls = lib.get().playlists;
+    const pls = lib.get().playlists.filter((p) => !p.remote);
     return [
       ...pls.map((p) => ({ label: p.name, icon: 'lyrics', run: () => void addToPlaylist([t.track.id], p) })),
       ...(pls.length ? ['-' as const] : []),
@@ -189,7 +189,7 @@ define({
   icon: 'lyrics',
   label: () => tx('s.rename'),
   // (the favourites are not a playlist of the user's making: neither renamed nor deleted)
-  when: (t, h) => t.id !== 'favorites' && !!h.ask,
+  when: (t, h) => t.id !== 'favorites' && !!h.ask && !lib.get().playlists.find((p) => p.id === t.id)?.remote,
   run: async (t, h) => {
     const n = await h.ask!(tx('s.rename'), tx('s.plName'), t.name);
     if (n) renamePlaylist(t.id, n);

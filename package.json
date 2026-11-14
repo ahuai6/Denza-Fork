@@ -1,7 +1,7 @@
 {
   "name": "cadenza",
   "productName": "Cadenza",
-  "version": "3.2.9",
+  "version": "3.2.9-denza.1",
   "description": "Cadenza: a personal music library whose songs play with lyrics that move to the music, exportable as lyric videos",
   "private": true,
   "type": "module",
@@ -38,10 +38,12 @@
       "dist-app/**",
       "package.json",
       "!node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**",
-      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**"
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**",
+      "vendor/kugou/**"
     ],
     "asarUnpack": [
-      "node_modules/onnxruntime-node/bin/**"
+      "node_modules/onnxruntime-node/bin/**",
+      "node_modules/@openai/codex*/**"
     ],
     "win": {
       "target": [
@@ -105,9 +107,14 @@
   "author": "Cadenza",
   "license": "AGPL-3.0-only",
   "dependencies": {
+    "@neteasecloudmusicapienhanced/api": "4.41.1",
+    "@openai/codex": "0.169.0",
+    "@sansenjian/qq-music-api": "2.6.0",
+    "kugoumusicapi": "file:vendor/kugou",
     "music-metadata": "12.3.2",
     "node-taglib-sharp": "6.0.3",
-    "onnxruntime-node": "1.31.1"
+    "onnxruntime-node": "1.31.1",
+    "qrcode": "1.5.4"
   },
   "devDependencies": {
     "@fontsource-variable/caveat": "^5.3.0",

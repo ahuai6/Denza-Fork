@@ -127,3 +127,16 @@ Windows 安裝程式是 Cadenza 自己畫的三頁（`build/installer.nsh`，圖
 1. 先查詞彙表：這個東西是不是已經有名字。
 2. 沒有的話，在這份文件加一列（用詞、英文、指什麼、不用哪些說法），再寫進字典。
 3. 動作的名字寫在指令裡（`src/app/commands/`），設定的名字跟著設定綱要（`src/app/settings/schema.ts`）；選單、按鈕、提示都從那裡取，不在畫面元件裡另外寫字。
+
+## Denza-Fork 新增用词
+
+| 用词 | English | 含义 |
+| --- | --- | --- |
+| 在线音乐 | Online music | 平台搜索、下载及账号入口 |
+| 本地歌单 | Local playlists | 用户在本机创建和编辑的歌单 |
+| 同步歌单 | Synced playlists | 手动从平台账号取得、关联本地歌曲的歌单副本 |
+| 翻译与匹配 | Translate and match | 整曲翻译、参考译文与逐行校对入口 |
+| 应用到草稿 | Apply to draft | 只更新编辑内容，之后由原编辑器保存 |
+| 期望音质 | Requested quality | 请求的规格；与文件实测规格区分 |
+
+新增界面文字的六语言对照集中在 `src/app/online/words.ts`，两种界面与工坊共用。

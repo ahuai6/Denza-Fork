@@ -22,6 +22,7 @@ import {
 } from '../playback/player';
 import { ts } from './i18n';
 import s from './SpacePanels.module.css';
+import { TranslationEditor } from '../ui/TranslationEditor';
 
 export type Panel = 'lyrics' | 'queue' | null;
 
@@ -129,6 +130,7 @@ function Lyrics({
   const text = useStore(player, (x) => x.lyrics?.text || ''),
     [edit, setEdit] = useState<string | null>(null),
     [busy, setBusy] = useState(false);
+  const [translating, setTranslating] = useState(false);
   useEffect(() => {
     if (!hasLyrics && edit == null) setEdit(text);
   }, [hasLyrics]);
@@ -155,6 +157,18 @@ function Lyrics({
           ✕
         </button>
       </header>
+      {translating && (
+        <TranslationEditor
+          source={edit ?? text}
+          song={{
+            title: trackOf(shownId)?.title || '',
+            artist: trackOf(shownId)?.artist || '',
+            album: trackOf(shownId)?.album || '',
+          }}
+          apply={setEdit}
+          close={() => setTranslating(false)}
+        />
+      )}
       {edit != null ? (
         <div className={s.editor}>
           <textarea
@@ -165,6 +179,14 @@ function Lyrics({
             placeholder={ts('lyr.placeholder')}
           />
           <div className={s.actions}>
+            <button
+              type="button"
+              className={s.ghost}
+              disabled={busy || !edit.trim()}
+              onClick={() => setTranslating(true)}
+            >
+              {tx('tr.title')}
+            </button>
             <button type="button" className={s.solid} disabled={busy} onClick={save}>
               {tx('s.save')}
             </button>

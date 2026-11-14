@@ -19,6 +19,10 @@ import { lang as langStore } from '../../i18n';
 import { useStore, settings, ui, openMenu } from '../state';
 import './space.css';
 import s from './SpaceShell.module.css';
+import { OnlineDialog, OnlineMusic } from '../ui/OnlineMusic';
+import { Button } from '../ui/kit';
+import { tx } from '../../i18n';
+import onlineStyle from '../ui/OnlineMusic.module.css';
 
 // every face the scene's textures and the HUD draw with, loaded before the first texture is drawn
 const FACES: [string, string][] = [
@@ -29,6 +33,7 @@ const FACES: [string, string][] = [
 ];
 
 export function SpaceShell() {
+  const [onlineOpen, setOnlineOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null),
     [ready, setReady] = useState(false),
     [cfg, setCfg] = useState<{ open: boolean; section?: string }>({ open: false }),
@@ -99,8 +104,9 @@ export function SpaceShell() {
   }, [menuOpen]);
   useEffect(() => {
     document.getElementById('mini')?.setAttribute('aria-pressed', String(mini));
-    world.current?.pause(mini || away);
-  }, [mini, away, gen, lang, ready]);
+    world.current?.pause(mini || away || onlineOpen);
+    if (onlineOpen) document.exitPointerLock();
+  }, [mini, away, gen, lang, ready, onlineOpen]);
   const close = () => {
     setCfg({ open: false });
     world.current?.takePointer();
@@ -120,6 +126,16 @@ export function SpaceShell() {
         />
       )}
       {ready && cfg.open && <SpaceSettings section={cfg.section} onClose={close} />}
+      {ready && !mini && (
+        <div className={onlineStyle.float}>
+          <Button onClick={() => setOnlineOpen(true)}>{tx('on.title')}</Button>
+        </div>
+      )}
+      {onlineOpen && (
+        <OnlineDialog title={tx('on.title')} close={() => setOnlineOpen(false)}>
+          <OnlineMusic />
+        </OnlineDialog>
+      )}
       {ready && (
         <PlayerExtras
           host={extra}
