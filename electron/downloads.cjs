@@ -1,3 +1,5 @@
+const { fetchAudio } = require('./online/http-files.cjs');
+const { validateFormat } = require('./online/audio-validation.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID, createHash } = require('node:crypto');
@@ -39,7 +41,7 @@ async function commit(temp, folder, name, ext, intent = async () => {}) {
   throw Error('Cannot reserve a file name');
 }
 class Downloads {
-  constructor(store, platforms, library, publish, fetcher = fetch) {
+  constructor(store, platforms, library, publish, fetcher = fetchAudio) {
     Object.assign(this, { store, platforms, library, publish, fetcher });
     this.running = new Map();
     this.tasks = new Set();
@@ -145,11 +147,16 @@ class Downloads {
       }
       job.status = 'resolving';
       this.publish();
-      const { url } = await this.platforms.resolve(job.track, job.quality, controller.signal);
-      const headerTimer = setTimeout(() => controller.abort(), 25000);
+      const {
+        url,
+        transport,
+        expectedFormat,
+        headerTimeoutMs = 25000,
+      } = await this.platforms.resolve(job.track, job.quality, controller.signal);
+      const headerTimer = setTimeout(() => controller.abort(), Math.min(180000, Math.max(1000, headerTimeoutMs)));
       let r;
       try {
-        r = await this.fetcher(url, { signal: controller.signal });
+        r = await this.fetcher(url, { signal: controller.signal, transport });
       } finally {
         clearTimeout(headerTimer);
       }
@@ -193,6 +200,7 @@ class Downloads {
       const ext = audioExtension(head);
       const mm = await import('music-metadata');
       const meta = await mm.parseFile(temp, { duration: true, skipCovers: true });
+      validateFormat(expectedFormat, ext, meta, job.track.duration);
       if (!meta.format.duration || (job.track.duration > 60 && meta.format.duration + 15 < job.track.duration))
         throw Error('Audio is incomplete or a preview');
       job.info = {

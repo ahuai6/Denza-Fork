@@ -76,14 +76,23 @@ export function OnlineDialog({ title, children, close }: { title: string; childr
     document.body,
   );
 }
-export function QualityPicker({ value, change }: { value: string; change(value: string): void }) {
+export function QualityPicker({
+  value,
+  change,
+  platform,
+}: {
+  value: string;
+  change(value: string): void;
+  platform?: string;
+}) {
+  const labels = platform && platform !== 'all' ? platformInfo(platform).qualityLabels : undefined;
   return (
     <Dropdown
       className={s.compact}
       label={tx('on.quality')}
       value={value}
       onChange={change}
-      options={['standard', 'high', 'lossless', 'hires'].map((k) => [k, tx('on.' + k)])}
+      options={(['standard', 'high', 'lossless', 'hires'] as const).map((k) => [k, tx(labels?.[k] || 'on.' + k)])}
     />
   );
 }
@@ -188,7 +197,7 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
         <div className={s.toolbar}>
           {(platform === 'all' || platformInfo(platform).download) && (
             <>
-              <QualityPicker value={quality} change={setQuality} />
+              <QualityPicker value={quality} change={setQuality} platform={platform} />
               <Button disabled={!selected.length} onClick={() => void download(selected)}>
                 {tx('on.selected')} ({selected.length})
               </Button>
@@ -347,7 +356,9 @@ export function SyncedPlaylists() {
             options={playlists.map((p) => [p.id, `${p.name} · ${platformName(p.remote!.platform)}`])}
           />
           <div className={s.toolbar}>
-            {platformInfo(remote.platform).download && <QualityPicker value={quality} change={setQuality} />}
+            {platformInfo(remote.platform).download && (
+              <QualityPicker value={quality} change={setQuality} platform={remote.platform} />
+            )}
             <Button disabled={!selected.tracks.length} onClick={() => void playIds(selected.tracks, 0)}>
               {tx('on.playLocal')}
             </Button>
@@ -370,6 +381,7 @@ export function SyncedPlaylists() {
               </Button>
             )}
           </div>
+          {platformInfo(remote.platform).playbackHelp && <Note>{tx(platformInfo(remote.platform).playbackHelp!)}</Note>}
           <small>
             {new Date(remote.updated).toLocaleString()} · {selected.tracks.length}/{remote.songs.length}
           </small>

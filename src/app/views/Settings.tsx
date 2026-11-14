@@ -13,6 +13,7 @@ import { askConfirm } from './Modals';
 import { readAllRhythmsAgain, clearStoredData, resetEverything } from '../actions/data';
 import type { SettingKey } from '../settings/schema';
 import { SettingField as SharedField } from '../ui/SettingField';
+import { ForkNotice } from '../ui/ForkNotice';
 import s from './Settings.module.css';
 
 const pc = (v: number | string) => Math.round(+v * 100) + '%';
@@ -180,6 +181,9 @@ export function SettingsView() {
             <DataGroup />
           </>
         )}
+        <Group title={tx('on.forkTitle')}>
+          <ForkNotice />
+        </Group>
         <Group title={tx('s.set.about')}>
           <Note>{tx('s.set.aboutText', { v: st.version || '' })}</Note>
         </Group>

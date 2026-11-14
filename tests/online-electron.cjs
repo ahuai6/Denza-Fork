@@ -110,12 +110,12 @@ const ROOT = path.resolve(__dirname, '..');
         await page.evaluate(() =>
           window.cadenzaOnline.request('enqueue', { keys: ['apple:i.fixture'], quality: 'lossless' }).then(
             () => false,
-            () => true,
+            (error) => error.message.includes('folder'),
           ),
         ),
         true,
       );
-      console.log('pass Apple playlist IPC and official playback links; protected download requests rejected');
+      console.log('pass Apple playlist IPC and official links; downloads require a chosen folder');
     } finally {
       await app.evaluate(() => {
         global.__appleTest.restore();

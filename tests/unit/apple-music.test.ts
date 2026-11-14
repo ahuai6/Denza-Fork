@@ -175,7 +175,7 @@ describe('Apple Music platform', () => {
     };
     await expect(a.page('songs', 'p.test', 1)).rejects.toThrow('account changed');
   });
-  it('opens only canonical official playback links and rejects protected audio extraction before SDK access', async () => {
+  it('opens canonical official links and resolves public file requests without SDK access or Apple credentials', async () => {
     const urls: string[] = [];
     const a = new AppleMusic(
       store(),
@@ -198,7 +198,10 @@ describe('Apple Music platform', () => {
       },
       a,
     );
-    await expect(p.resolve({ platform: 'apple' }, 'lossless')).rejects.toThrow('official Apple Music app');
+    const result = await p.resolve({ platform: 'apple', id: 'i.fixture', catalogId: '123' }, 'lossless');
+    expect(new URL(result.url).pathname).toBe('/download/flac');
+    expect(new URL(result.url).searchParams.get('song')).toBe('123');
+    expect(result).not.toHaveProperty('cookie');
     await expect(p.account('apple', 'private')).rejects.toThrow('sign-in window');
   });
   it('closes and clears only the dedicated Apple session when signing out', async () => {

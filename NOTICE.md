@@ -64,3 +64,5 @@ Music platform protocol libraries: `@neteasecloudmusicapienhanced/api`, `@sansen
 QR images use `qrcode` (MIT). Codex OAuth and text generation use the official `@openai/codex` runtime (Apache-2.0); its license is retained as `licenses/OpenAI-Codex.txt`. No Sonora or SyncC UI, player or audio-container implementation is embedded in this application.
 
 Apple Music account/catalog behavior in `electron/apple-music.cjs` is rewritten with reference to the user's supplied LyricsFlow Downloader 1.3.0 source (declared MIT in its package metadata). Its UI, player, audio download/decryption backend and tagging pipeline are not embedded. Apple Music is a trademark of Apple Inc.; this application is not affiliated with Apple.
+
+AM file downloads additionally use the public HTTP service documented at https://api.trylyricsflow.com/openapi.json (observed API 2.0.0). Denza-Fork implements only request construction, streaming file transfer, format verification and library integration; it does not embed the service backend, audio decryption algorithms or keys. This service dependency is maintained independently of the LyricsFlow Downloader application.

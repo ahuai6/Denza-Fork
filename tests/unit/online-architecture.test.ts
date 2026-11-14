@@ -43,7 +43,7 @@ describe('online module boundaries', () => {
     expect(catalog.map((info: { id: string }) => info.id)).toEqual(PLATFORMS);
     const providers = new Platforms(store());
     for (const id of PLATFORMS) expect(providers.info(id)).toEqual(platformInfo(id));
-    expect(platformInfo('apple').download).toBe(false);
+    expect(platformInfo('apple').download).toBe(true);
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
     expect(pkg.build.files).toContain('shared/**');
     expect(() => providers.provider('unknown')).toThrow('Unknown');

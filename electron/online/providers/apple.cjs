@@ -1,4 +1,5 @@
-module.exports = (_host, apple) => ({
+const { LyricsFlowAudio } = require('../lyricsflow-audio.cjs');
+module.exports = (_host, apple, audio = new LyricsFlowAudio()) => ({
   search: (...args) => apple.search(...args),
   login: (action) => apple.login(action),
   page: (...args) => apple.page(...args),
@@ -7,9 +8,7 @@ module.exports = (_host, apple) => ({
   verify: () => {
     throw Error('Use the Apple Music sign-in window');
   },
-  resolve: () => {
-    throw Error('Apple Music offline downloads are managed by the official Apple Music app');
-  },
+  resolve: (track, quality) => audio.resolve(track, quality),
   lyrics: () => {
     throw Error('Apple Music lyrics are available in the official player');
   },

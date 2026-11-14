@@ -38,6 +38,13 @@
       "kind": "protocol",
       "source": "https://platform.openai.com/docs/api-reference",
       "adapter": "electron/translation-service.cjs"
+    },
+    {
+      "id": "lyricsflow-file-service",
+      "kind": "protocol",
+      "source": "https://api.trylyricsflow.com/openapi.json",
+      "observedVersion": "2.0.0",
+      "adapter": "electron/online/lyricsflow-audio.cjs"
     }
   ]
 }

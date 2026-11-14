@@ -143,3 +143,5 @@ Windows 安裝程式是 Cadenza 自己畫的三頁（`build/installer.nsh`，圖
 | 远端歌曲 | Remote song | 尚未关联本地音频的在线歌曲 |
 
 新增界面文字的六语言对照集中在 `src/app/online/words.ts`，两种界面与工坊共用。
+
+Fork 设置中的用途提醒仅提示用户自行管理文件，不表示下载授权、免责或自动删除。AM 的 MP3/AAC/FLAC/ALAC 标签表示期望文件格式，不承诺源音质或高采样率。

@@ -39,14 +39,19 @@
     "id": "apple",
     "label": "Apple Music",
     "login": "browser",
-    "download": false,
+    "download": true,
     "lyrics": false,
     "remotePlayback": true,
     "loginLabel": "on.appleSignin",
     "accountHelp": "on.appleHelp",
     "syncHelp": "on.appleSyncHelp",
-    "playbackHelp": "on.applePlaybackHelp",
-    "offlineLabel": "on.appleOffline",
-    "credentialImport": false
+    "playbackHelp": "on.appleServiceHelp",
+    "credentialImport": false,
+    "qualityLabels": {
+      "standard": "on.mp3",
+      "high": "on.aac",
+      "lossless": "on.flac",
+      "hires": "on.alac"
+    }
   }
 ]

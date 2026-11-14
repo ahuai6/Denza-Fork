@@ -1,6 +1,35 @@
 import { add } from '../../i18n';
 // Shared by the classic library, space panels and workshop.
 add({
+  'on.forkTitle': ['Denza-Fork', 'Denza-Fork', 'Denza-Fork', 'Denza-Fork', 'Denza-Fork', 'Denza-Fork'],
+  'on.studyNotice': [
+    '內容僅供個人學習使用，請於下載後24小時內自行刪除',
+    '内容仅供个人学习使用，请于下载后24小时内自行删除',
+    'Content is for personal study only. Please delete it yourself within 24 hours of downloading.',
+    '個人学習用のコンテンツです。ダウンロード後24時間以内に各自で削除してください。',
+    '개인 학습용 콘텐츠입니다. 다운로드 후 24시간 이내에 직접 삭제하세요.',
+    'Contenido solo para estudio personal. Elimínalo en las 24 horas posteriores a la descarga.',
+  ],
+  'on.rightsNotice': [
+    '請確認有權下載；此提示不構成授權或免責。',
+    '请确认有权下载；此提示不构成授权或免责。',
+    'Ensure you have permission to download. This notice grants no rights or exemption.',
+    'ダウンロードの権限をご確認ください。この表示は許諾や免責を与えません。',
+    '다운로드 권한을 확인하세요. 이 안내는 허가나 면책을 부여하지 않습니다.',
+    'Comprueba que tienes permiso. Este aviso no concede derechos ni exenciones.',
+  ],
+  'on.appleServiceHelp': [
+    'AM 音訊由 LyricsFlow 公開服務提供；不會傳送 Apple 登入憑據。',
+    'AM 音频由 LyricsFlow 公开服务提供；不会发送 Apple 登录凭据。',
+    'AM audio comes from the public LyricsFlow service. Apple sign-in credentials are never sent.',
+    'AM 音声は LyricsFlow の公開サービスから取得。Apple のログイン情報は送信しません。',
+    'AM 오디오는 LyricsFlow 공개 서비스에서 받습니다. Apple 로그인 정보는 보내지 않습니다.',
+    'El audio AM procede del servicio público LyricsFlow. No se envían credenciales de Apple.',
+  ],
+  'on.mp3': ['MP3', 'MP3', 'MP3', 'MP3', 'MP3', 'MP3'],
+  'on.aac': ['AAC', 'AAC', 'AAC', 'AAC', 'AAC', 'AAC'],
+  'on.flac': ['FLAC', 'FLAC', 'FLAC', 'FLAC', 'FLAC', 'FLAC'],
+  'on.alac': ['ALAC', 'ALAC', 'ALAC', 'ALAC', 'ALAC', 'ALAC'],
   'on.appleSyncHelp': [
     '手動取得歌單；已配對的本機歌曲可直接播放。',
     '手动获取歌单；已匹配的本地歌曲可直接播放。',

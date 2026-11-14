@@ -4,6 +4,7 @@ const { Platforms, PLATFORMS } = require('./platforms.cjs');
 const { Downloads } = require('./downloads.cjs');
 const { Translator, CodexText } = require('./translation-service.cjs');
 const { AppleMusic, appleFetch } = require('./apple-music.cjs');
+const { fetchAudio } = require('./online/http-files.cjs');
 
 // Fetch the complete snapshot before changing any saved playlist. Repeated/partial pages never erase the old copy.
 async function collectPages(read, signal) {
@@ -60,7 +61,9 @@ async function start(ipcMain, getWin, library) {
         jobs: downloads.view(),
       });
   };
-  const downloads = new Downloads(store, platforms, library, publish);
+  const downloads = new Downloads(store, platforms, library, publish, (url, options) =>
+    fetchAudio(url, options, (fileURL, fileOptions) => net.fetch(fileURL, { ...fileOptions, credentials: 'omit' })),
+  );
   const codex = new CodexText(app.getPath('userData'), (url) => shell.openExternal(url));
   const translator = new Translator(store, codex);
   const track = (key) => {

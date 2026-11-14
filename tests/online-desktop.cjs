@@ -217,9 +217,8 @@ function bridge() {
       .getByRole('combobox', { name: '同步歌单', exact: true })
       .click();
     await page.getByRole('option', { name: /Apple fixture playlist/ }).click();
-    assert.equal(await music.getByRole('button', { name: '下载歌曲', exact: true }).count(), 0);
+    assert.equal(await music.getByRole('button', { name: '下载歌曲', exact: true }).count(), 1);
     await music.getByRole('button', { name: '在浏览器播放', exact: true }).first().click();
-    await music.getByRole('button', { name: '离线下载说明', exact: true }).click();
     await page.screenshot({ path: path.join(shots, 'apple-playlists.png') });
     await music.getByRole('navigation').getByRole('button', { name: '搜索歌曲', exact: true }).click();
     await music.getByRole('combobox', { name: '全部平台', exact: true }).click();
@@ -227,8 +226,9 @@ function bridge() {
     await music.getByRole('textbox', { name: '搜索歌曲', exact: true }).fill('apple');
     await music.locator('form').getByRole('button', { name: '搜索歌曲', exact: true }).click();
     await music.getByText('Apple fixture', { exact: true }).waitFor();
-    assert.equal(await music.getByRole('checkbox', { name: 'Apple fixture', exact: true }).isDisabled(), true);
+    assert.equal(await music.getByRole('checkbox', { name: 'Apple fixture', exact: true }).isDisabled(), false);
     await music.getByRole('button', { name: '在浏览器播放', exact: true }).click();
+    await music.getByRole('button', { name: '下载歌曲', exact: true }).click();
     const appleCalls = await page.evaluate(() => window.__onlineCalls.filter((c) => c.op === 'openRemote'));
     assert(appleCalls.some((c) => c.args.playlistId === 'apple-list'));
     assert(appleCalls.some((c) => c.args.key === 'apple:123'));
@@ -236,9 +236,19 @@ function bridge() {
       await page.evaluate(() =>
         window.__onlineCalls.some((c) => c.op === 'enqueue' && c.args.keys.some((key) => key.startsWith('apple:'))),
       ),
-      false,
+      true,
     );
-    console.log('pass Apple sign-in, unified playlists/search and official playback without protected downloads');
+    console.log(
+      'pass Apple sign-in, unified playlists/search and official playback and unified public-service downloads',
+    );
+    await page.locator('[data-page="settings"]').click();
+    await page
+      .locator('[data-test="fork-notice"]')
+      .getByText('内容仅供个人学习使用，请于下载后24小时内自行删除', { exact: true })
+      .waitFor();
+    await page.locator('[data-test="fork-notice"]').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: path.join(shots, 'fork-settings.png') });
     await page.locator('[data-page="workshop"]').click();
     await page.waitForFunction(() => window.__cadenza?.workshop?.get().session);
     await page.evaluate(async () => {

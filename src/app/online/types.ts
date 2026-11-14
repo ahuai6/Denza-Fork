@@ -62,7 +62,22 @@ export interface SearchResult {
   errors: { platform: string; message: string }[];
 }
 export const MUSIC_PLATFORMS: [MusicPlatform, string][] = catalog.map((info) => [info.id as MusicPlatform, info.label]);
-export function platformInfo(platform: string) {
+export interface PlatformInfo {
+  id: string;
+  label: string;
+  login: string;
+  download: boolean;
+  lyrics: boolean;
+  remotePlayback: boolean;
+  credentialImport: boolean;
+  loginLabel: string;
+  accountHelp: string;
+  syncHelp: string;
+  playbackHelp?: string;
+  offlineLabel?: string;
+  qualityLabels?: Partial<Record<'standard' | 'high' | 'lossless' | 'hires', string>>;
+}
+export function platformInfo(platform: string): PlatformInfo {
   const info = catalog.find((value) => value.id === platform);
   if (!info) throw new Error('Unknown music platform');
   return info;
