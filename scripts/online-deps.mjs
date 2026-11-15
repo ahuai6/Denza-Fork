@@ -36,6 +36,16 @@ async function main() {
   let failed = false;
   const rows = await Promise.all(
     manifest.dependencies.map(async (entry) => {
+      if (entry.kind === 'source') {
+        const actual = fingerprint(join(ROOT, entry.path));
+        if (actual !== entry.sha256) failed = true;
+        return {
+          id: entry.id,
+          source: entry.source,
+          commit: entry.commit,
+          status: actual === entry.sha256 ? 'source snapshot verified' : 'source snapshot mismatch',
+        };
+      }
       if (entry.kind === 'protocol')
         return { id: entry.id, source: entry.source, status: 'unversioned protocol; adapter checks required' };
       const pinned = pkg.dependencies[entry.id];

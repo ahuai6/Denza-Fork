@@ -85,7 +85,15 @@ AM 账号模块与文件服务适配互不调用：第三方服务只取得目�
 
 - `electron/online/public-resolvers.cjs` 是匿名备用取链适配器，协议来源独立登记；由组装层注入 Platforms，不向 SDK 或前端扩散接口格式。解析成功后若文件失效，队列先在同档位请求备用来源，再降档。用户的偏好和实际档位分开保存。
 - `electron/online/lyricsflow-audio.cjs` 统一 AM 链接目录展开、下载请求和歌词查询；账号令牌仍仅归 Apple 官方适配器管理。目录分页限定服务同源与当前地区，拒绝不完整的链接集合。
-- `src/lyrics/download.ts` 仅包含纯格式转换，复用 Cadenza 的解析器。`scripts/online-lyrics.mjs` 将其构建为 `electron/generated/lyrics.cjs`；测试与应用构建自动生成，打包必须包含并检查该模块。不依赖参考应用的歌词实现。
+- `src/lyrics/download.ts` 仅包含原生格式读取与多轨合并，不合成 TTML，复用 Cadenza 的解析器。`scripts/online-lyrics.mjs` 将其构建为 `electron/generated/lyrics.cjs`；测试与应用构建自动生成，打包必须包含并检查该模块。不依赖参考应用的歌词实现。
 - `electron/online/tags.cjs` 负责下载文件的容器字段，队列负责暂存、回读与事务。原编辑器/歌词保存路径不依赖这个模块。
 - `CollectionCards.module.css` 与 `Cover` 共用 Cadenza 原卡片和封面表现；经典歌单和在线扩展使用同一组样式，空间通过已有共享在线面板访问，不复制业务。
 - `online.json.preferences` 是可兼容的新增字段：各平台音质与全局歌词模式。任务保存入队时的歌词模式、请求档位、实际档位、来源与写入字段。旧数据加载补默认值，现有文件和歌单不迁移覆盖。
+
+## 第三版接入边界
+
+- `OnlineLyricsSearch.tsx` 是经典原在线匹配入口与空间歌词面板共用的完整歌词选择器；`SearchSongs` 提供预填、预览和结果回调。LRCLIB 原接口继续由既有库提供。完整歌词通过原 `useLyrics` 保存，不另起写盘路径。
+- 平台 `lyrics` 契约提供 `original/translation/pronunciation/lrc/ttml`，`Platforms` 统一组合。`lyric-formats.cjs` 只处理 YRC/KRC 时间和语言轨，`qq-lyric-codec.cjs` 只处理在线 QQ 歌词文本编码。LRC-GET 格式辅助代码直接固定其来源提交、许可证和源码指纹；不含本地 QMC 音频处理或 AM 音频解密。
+- 匹配编辑只替换明确识别的译文；对于无角色 LRC 的歧义附行宁可保留。清理空白行限制在用户应用匹配草稿的路径，不改变 Cadenza 对空时间戳/间奏的底层解析。
+- 空间 `data.ts` 的同步歌单统计完整远端曲目，`world.ts` 在有原封面时复用原贴图缓存。`SpaceDetail` 的远端分支使用共享 `SyncedPlaylists` 固定歌单模式；本地分支保留原行为。
+- `artwork.cjs` 负责匿名、有大小/时间限制的封面读取与重定向域名校验。`library-links.cjs` 合并同一歌单并发封面请求，写入前核对当前歌单身份和封面 URL；`library.cjs` 只注入原封面存储能力。API 与播放器均不依赖 3D 房间源码。

@@ -6,7 +6,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { tx } from '../../i18n';
 import { D, Lib } from '../bridge';
 import { ui, settings, useStore, trackOf, toast, openMenu } from '../state';
-import { Button, IconButton, Row, Slider, Note, Badge, Section, Dropdown, Cover } from '../ui/kit';
+import { Button, IconButton, Row, Slider, Note, Section, Dropdown, Cover } from '../ui/kit';
 import { CueBar, cueKeyDown } from '../ui/cues';
 import { Icon } from '../ui/icons';
 import { engine } from '../playback/stage';
@@ -35,6 +35,7 @@ import { setSettings } from '../actions/settings';
 import s from './Effect.module.css';
 import { PerfHud } from './PerfHud';
 import { isTtml, ttmlToLrc } from '../../engine';
+import { OnlineLyricsSearch } from '../ui/OnlineLyricsSearch';
 import { TranslationEditor } from '../ui/TranslationEditor';
 
 const IDLE_MS = 2600;
@@ -418,11 +419,7 @@ export function LyricsTab() {
     target = useStore(settings, (x) => x.lyricsTarget) === 'lrc' ? 'lrc' : 'tag';
   const [text, setText] = useState(() => (p.hasLyrics ? session.spec.lyrics : '') || ''),
     [msg, setMsg] = useState('');
-  const [q, setQ] = useState({ title: t ? t.title : '', artist: t ? t.artist : '' }),
-    [res, setRes] = useState<Awaited<ReturnType<NonNullable<typeof Lib>['searchLyrics']>> | null>(null);
-  const [busy, setBusy] = useState(false),
-    [pick, setPick] = useState<number | null>(null),
-    ta = useRef<HTMLTextAreaElement>(null);
+  const ta = useRef<HTMLTextAreaElement>(null);
   useEffect(() => setTranslating(false), [p.shownId]);
   // (TTML lyrics are edited as LRC: saved, the song reads its LRC from then on)
   useEffect(() => {
@@ -433,17 +430,6 @@ export function LyricsTab() {
     const ok = await useLyrics(src);
     setText(isTtml(src) ? ttmlToLrc(src) : src);
     setMsg(tx(ok ? 's.lyr.saved' : 'load.none'));
-  };
-  const search = async () => {
-    setBusy(true);
-    setRes(null);
-    setPick(null);
-    try {
-      setRes(await Lib!.searchLyrics({ ...q, album: t?.album, duration: t?.duration }));
-    } catch {
-      setMsg(tx('s.netFail'));
-    }
-    setBusy(false);
   };
   const end = session.musicEnd;
   return (
@@ -514,54 +500,11 @@ export function LyricsTab() {
       )}
       <div style={{ display: 'grid', gap: 8 }}>
         <b style={{ fontSize: 13 }}>{tx('s.lyr.online')}</b>
-        <form
-          className={s.q}
-          onSubmit={(e) => {
-            e.preventDefault();
-            search();
-          }}
-        >
-          <input
-            type="text"
-            value={q.title}
-            placeholder={tx('s.col.title')}
-            onChange={(e) => setQ({ ...q, title: e.target.value })}
-          />
-          <input
-            type="text"
-            value={q.artist}
-            placeholder={tx('s.artists')}
-            onChange={(e) => setQ({ ...q, artist: e.target.value })}
-          />
-          <Button kind="primary" size="sm" type="submit" disabled={busy}>
-            {tx(busy ? 's.searching' : 's.searchBtn')}
-          </Button>
-        </form>
-        {res && !res.length && <Note>{tx('s.empty.results')}</Note>}
-        {res &&
-          res.map((r) => (
-            <div key={r.id} className={s.res}>
-              <button type="button" className={s.resH} onClick={() => setPick(pick === r.id ? null : r.id)}>
-                <span>
-                  <b>{r.title}</b>
-                  <small>{[r.artist, r.album].filter(Boolean).join(' · ')}</small>
-                </span>
-                <Badge k={r.synced ? 'accent' : undefined}>
-                  {r.instrumental ? tx('s.instrumental') : r.synced ? tx('s.lyr.synced') : tx('s.lyr.plain')}
-                </Badge>
-              </button>
-              {pick === r.id && !r.instrumental && (
-                <>
-                  <pre className={s.pre}>{(r.synced || r.plain).split('\n').slice(0, 14).join('\n')}</pre>
-                  <div style={{ padding: '0 11px 11px' }}>
-                    <Button kind="primary" size="sm" onClick={() => use(r.synced || spreadPlain(r.plain, end))}>
-                      {tx('s.lyr.use')}
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
+        <OnlineLyricsSearch
+          key={p.shownId}
+          song={{ title: t?.title || '', artist: t?.artist || '', album: t?.album || '', duration: t?.duration }}
+          apply={(value) => use(isTtml(value) || hasTimedLines(value) ? value : spreadPlain(value, end))}
+        />
       </div>
     </>
   );

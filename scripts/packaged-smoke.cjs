@@ -13,8 +13,11 @@ const root = path.join(resources, 'app.asar');
     ['netease', 'qq', 'kugou', 'apple'],
   );
   const { downloadLyricFormats } = require(path.join(root, 'electron/generated/lyrics.cjs'));
-  assert(downloadLyricFormats('[00:01]Synthetic').ttml.includes('<tt '), 'Missing packaged lyric conversion');
+  assert.equal(downloadLyricFormats('[00:01]Synthetic').lrc, '[00:01]Synthetic');
+  assert.equal(downloadLyricFormats('[00:01]Synthetic').ttml, '', 'LRC must not synthesize TTML');
   require(path.join(root, 'electron/online/tags.cjs'));
+  const { qrcLrc } = require(path.join(root, 'electron/online/qq-lyric-codec.cjs'));
+  assert(qrcLrc('[1000,1000]Fixture(1000,1000)').includes('[00:01.000]'), 'Missing packaged lyric codec');
   const { loadSDK } = require(path.join(root, 'electron/online/sdk-loaders.cjs'));
   for (const [platform, method] of [
     ['netease', 'cloudsearch'],

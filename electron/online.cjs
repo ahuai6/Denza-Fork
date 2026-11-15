@@ -1,4 +1,5 @@
 const path = require('node:path');
+const { readJSON } = require('./online/json-client.cjs');
 const { OnlineStore } = require('./online-store.cjs');
 const { Platforms, PLATFORMS } = require('./platforms.cjs');
 const { Downloads } = require('./downloads.cjs');
@@ -46,6 +47,7 @@ async function start(ipcMain, getWin, library) {
   );
   const fetcher = (url, options) => net.fetch(url, { ...options, credentials: 'omit' });
   const platforms = new Platforms(store, undefined, apple, {
+    json: (url, options) => readJSON(fetcher, url, options),
     audio: new LyricsFlowAudio(undefined, fetcher),
     fallback: createPublicResolver(fetcher),
   });
@@ -186,6 +188,10 @@ async function start(ipcMain, getWin, library) {
       const list = library.remotePlaylist(playlistId);
       if (list?.platform !== 'apple') throw Error('Not an Apple Music playlist');
       return platforms.open(null, list);
+    },
+    playlistCover: ({ id }) => {
+      if (typeof id !== 'string' || id.length > 100) throw Error('Invalid playlist');
+      return library.cachePlaylistCover(id);
     },
     downloadAction: ({ id, action }) => downloads.action(id, action),
     lyrics: ({ key, jobId }) => job(jobId, (signal) => platforms.lyrics(track(key), signal)),

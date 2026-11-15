@@ -1,6 +1,32 @@
 import { add } from '../../i18n';
 // Shared by the classic library, space panels and workshop.
 add({
+  'on.short': ['線上', '在线', 'Online', 'オンライン', '온라인', 'En línea'],
+  'on.fullTracksHelp': [
+    '取得來源提供的原詞、翻譯與讀音',
+    '取得来源提供的原词、翻译与发音',
+    'Fetch all original, translated and pronunciation tracks supplied by the source',
+    '配信元の原文・翻訳・読みを取得',
+    '제공되는 원문·번역·발음 가져오기',
+    'Obtiene las pistas originales, traducidas y de pronunciación disponibles',
+  ],
+  'on.useFullLyrics': [
+    '使用完整歌詞',
+    '使用完整歌词',
+    'Use complete lyrics',
+    '歌詞全体を使う',
+    '전체 가사 사용',
+    'Usar letra completa',
+  ],
+  'on.nativeTtmlOnly': [
+    '僅在來源提供原生 TTML 時寫入',
+    '仅在来源提供原生 TTML 时写入',
+    'TTML is embedded only when supplied natively',
+    '配信元の TTML のみ埋め込み',
+    '원본 TTML이 제공될 때만 포함',
+    'TTML solo si lo proporciona la fuente',
+  ],
+
   'on.lyricFields': [
     '內嵌歌詞欄位',
     '内嵌歌词字段',

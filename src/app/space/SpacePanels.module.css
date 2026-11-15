@@ -351,3 +351,9 @@
 .wclose:hover {
   background: rgba(196, 64, 48, 0.85);
 }
+
+.remoteBody {
+  padding: 0 16px 16px;
+  overflow: auto;
+  max-height: min(65dvh, 620px);
+}

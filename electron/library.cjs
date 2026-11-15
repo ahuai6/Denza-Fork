@@ -1364,6 +1364,13 @@ const pathOf = (id) => {
 };
 const onlineLibrary = require('./online/library-links.cjs').createLibraryIntegration({
   getDB: () => db,
+  cacheArtwork: async (url) => {
+    const { fetchArtwork } = require('./online/artwork.cjs');
+    const data = await fetchArtwork((url, options) => net.fetch(url, options), url);
+    if (nativeImage.createFromBuffer(data).isEmpty()) return null;
+    return storeCover(data);
+  },
+  hasArtwork: (key) => /^[a-f0-9]{20}$/.test(key) && fs.existsSync(path.join(P.covers(), key + '.img')),
   trackView,
   scan,
   watchAll,
@@ -1373,6 +1380,7 @@ const onlineLibrary = require('./online/library-links.cjs').createLibraryIntegra
 module.exports = {
   start,
   pathOf,
+  cachePlaylistCover: onlineLibrary.cachePlaylistCover,
   importDownload: onlineLibrary.importDownload,
   syncPlaylists: onlineLibrary.syncPlaylists,
   remoteSong: onlineLibrary.remoteSong,

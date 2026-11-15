@@ -26,12 +26,14 @@ describe('translation drafts', () => {
     expect(merged).toContain('[00:01.00]New translation');
     expect(merged).not.toContain('Old translation');
     expect(merged).toContain('[offset:100]');
-    expect(merged).toContain('[00:03.00]Next day\n[00:04.00]');
+    // Denza.3: matching drafts remove timestamp-only/whitespace rows on explicit apply.
+    expect(merged).toContain('[00:03.00]Next day');
+    expect(merged).not.toContain('[00:04.00]');
     expect(translationLines(merged)[0].t).toBeCloseTo(0.9);
     expect(translationLines(merged)[0].translation).toBe('New translation');
   });
-  it('leaves untouched LRC exactly unchanged when no values were edited', () =>
-    expect(mergeTranslations(lyrics, {})).toBe(lyrics));
+  it('keeps all meaningful LRC rows when no values were edited', () =>
+    expect(mergeTranslations(lyrics, {})).toBe(lyrics.replace('[00:04.00]\n', '').trimEnd()));
   it('retains readings and applies different translations to repeated timestamp groups', () => {
     const source = '[00:01][00:04]あの日\n[00:01]ano hi\n[00:04]ano hi';
     const lines = translationLines(source);

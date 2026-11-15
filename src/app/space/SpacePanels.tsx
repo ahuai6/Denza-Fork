@@ -22,6 +22,8 @@ import {
 } from '../playback/player';
 import { ts } from './i18n';
 import s from './SpacePanels.module.css';
+import { OnlineLyricsSearch } from '../ui/OnlineLyricsSearch';
+import { OnlineDialog } from '../ui/OnlineMusic';
 import { TranslationEditor } from '../ui/TranslationEditor';
 
 export type Panel = 'lyrics' | 'queue' | null;
@@ -130,7 +132,8 @@ function Lyrics({
   const text = useStore(player, (x) => x.lyrics?.text || ''),
     [edit, setEdit] = useState<string | null>(null),
     [busy, setBusy] = useState(false);
-  const [translating, setTranslating] = useState(false);
+  const [translating, setTranslating] = useState(false),
+    [searching, setSearching] = useState(false);
   useEffect(() => {
     if (!hasLyrics && edit == null) setEdit(text);
   }, [hasLyrics]);
@@ -157,6 +160,27 @@ function Lyrics({
           ✕
         </button>
       </header>
+      <button className={s.ghost} onClick={() => setSearching(true)}>
+        {tx('s.lyr.online')}
+      </button>
+      {searching && (
+        <OnlineDialog title={tx('s.lyr.online')} close={() => setSearching(false)}>
+          <OnlineLyricsSearch
+            key={shownId}
+            song={{
+              title: trackOf(shownId)?.title || '',
+              artist: trackOf(shownId)?.artist || '',
+              album: trackOf(shownId)?.album || '',
+              duration: trackOf(shownId)?.duration,
+            }}
+            apply={async (value) => {
+              await useLyrics(value);
+              setEdit(null);
+              setSearching(false);
+            }}
+          />
+        </OnlineDialog>
+      )}
       {translating && (
         <TranslationEditor
           source={edit ?? text}

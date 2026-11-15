@@ -66,3 +66,9 @@ QR images use `qrcode` (MIT). Codex OAuth and text generation use the official `
 Apple Music account/catalog behavior in `electron/apple-music.cjs` is rewritten with reference to the user's supplied LyricsFlow Downloader 1.3.0 source (declared MIT in its package metadata). Its UI, player, audio download/decryption backend and tagging pipeline are not embedded. Apple Music is a trademark of Apple Inc.; this application is not affiliated with Apple.
 
 AM file downloads additionally use the public HTTP service documented at https://api.trylyricsflow.com/openapi.json (observed API 2.0.0). Denza-Fork implements only request construction, streaming file transfer, format verification and library integration; it does not embed the service backend, audio decryption algorithms or keys. This service dependency is maintained independently of the LyricsFlow Downloader application.
+
+## 在线 QQ 歌词格式辅助代码（Denza-Fork）
+
+`electron/online/vendor/lrc-get/des-helper.cjs` 来自 [valenbine/LRC-GET](https://github.com/valenbine/LRC-GET) 的 `src/des-helper.js`，固定提交 `2cc0e67dcfc567a122ebb953ef696783a6760d17`（MIT，Copyright (c) 2026 valenbine）。保留许可证于同目录 `LICENSE`；仅适配 CommonJS 导出并统一排版，协议代码单独维护，不跟随 Sonora 应用更新。来源与指纹见 `docs/online-dependencies.json`。
+
+此辅助代码仅用于在线歌词文本格式，不处理音频、账号密钥、会员权限或本地加密音频文件。QQ 格式常量是公开的歌词格式参数，不是用户凭据或音频内容密钥。

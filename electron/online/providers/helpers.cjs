@@ -53,6 +53,7 @@ function song(raw, platform) {
   const duration = Number(first(r, ['dt', 'duration', 'timelen', 'timelength', 'interval', 'Duration'], 0));
   return {
     platform,
+    lyricId: /^\d+$/.test(String(r.id || r.songid || '')) ? String(r.id || r.songid) : undefined,
     artworkUrl: imageURL(
       first(r, [
         'al.picUrl',

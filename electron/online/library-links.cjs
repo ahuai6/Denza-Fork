@@ -1,7 +1,17 @@
 const path = require('node:path');
 const crypto = require('node:crypto');
 // Cadenza owns the database and scanning lifecycle; this module owns only the online extension.
-function createLibraryIntegration({ getDB, trackView, scan, watchAll, changed, view }) {
+function createLibraryIntegration({
+  getDB,
+  trackView,
+  scan,
+  watchAll,
+  changed,
+  view,
+  cacheArtwork,
+  hasArtwork = () => true,
+}) {
+  const covers = new Map();
   const normalizeSong = (v) =>
     String(v || '')
       .normalize('NFKC')
@@ -91,11 +101,13 @@ function createLibraryIntegration({ getDB, trackView, scan, watchAll, changed, v
         db.playlists.push(p);
       }
       p.name = list.name;
+      const cached = p.remote && p.remote.artworkUrl === list.artworkUrl ? p.remote.cover : null;
       p.remote = {
         platform,
         uid,
         id: list.id,
         artworkUrl: list.artworkUrl || '',
+        cover: cached || null,
         updated: Date.now(),
         songs: list.songs,
       };
@@ -104,8 +116,32 @@ function createLibraryIntegration({ getDB, trackView, scan, watchAll, changed, v
     changed();
     return view();
   }
+  async function cachePlaylistCover(id) {
+    const playlist = getDB().playlists.find((p) => p.id === id),
+      remote = playlist?.remote;
+    if (!remote?.artworkUrl || !cacheArtwork) return null;
+    if (remote.cover && hasArtwork(remote.cover)) return remote.cover;
+    const key = id + '|' + remote.artworkUrl;
+    if (covers.has(key)) return covers.get(key);
+    if (covers.size >= 4) return null;
+    const task = (async () => {
+      try {
+        const cover = await cacheArtwork(remote.artworkUrl);
+        const current = getDB().playlists.find((p) => p.id === id)?.remote;
+        if (!cover || current?.uid !== remote.uid || current?.artworkUrl !== remote.artworkUrl) return null;
+        current.cover = cover;
+        changed();
+        return cover;
+      } finally {
+        covers.delete(key);
+      }
+    })();
+    covers.set(key, task);
+    return task;
+  }
   return {
     linkSyncedPlaylists,
+    cachePlaylistCover,
     importDownload,
     syncPlaylists,
     remoteSong: (key) =>

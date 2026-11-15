@@ -9,7 +9,6 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const PAGE = 'file://' + path.resolve(__dirname, '..', 'dist-app', 'index.html');
 const SHOTS = process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'cz-space-'));
 let failed = 0;
 const ok = (name, pass, detail) => {
@@ -111,7 +110,13 @@ const SONG = `(() => {
 
 (async () => {
   fs.mkdirSync(SHOTS, { recursive: true });
-  const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'] });
+  // HTTP also works with managed browsers that block file://; keep all original assertions and timeouts.
+  const { server, url } = await require('./serve.cjs')(path.resolve(__dirname, '../dist-app'));
+  const PAGE = url + '/index.html';
+  const browser = await chromium.launch({
+    executablePath: process.env.CHROMIUM_PATH,
+    args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'],
+  });
   const p = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const errors = [];
   p.on('pageerror', (e) => errors.push((e.stack || e.message).slice(0, 300)));
@@ -379,6 +384,7 @@ const SONG = `(() => {
 
   ok('no errors on the page', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
+  server.close();
   console.log(`${failed ? failed + ' failed' : 'all passed'}; screenshots in ${SHOTS}`);
   process.exit(failed ? 1 : 0);
 })();

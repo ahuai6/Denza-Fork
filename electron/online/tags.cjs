@@ -28,7 +28,11 @@ function nativeTtml(native) {
   return '';
 }
 function writeDownloadTags(path, ext, track, found, mode = 'both', artwork) {
-  const formats = downloadLyricFormats(found?.ttml || found?.original || '', found?.translation || '');
+  const formats = downloadLyricFormats(
+    found?.ttml || found?.original || '',
+    found?.translation || '',
+    found?.pronunciation || '',
+  );
   const fields = [],
     file = taglib.File.createFromPath(path);
   try {

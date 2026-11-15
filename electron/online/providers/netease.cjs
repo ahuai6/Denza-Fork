@@ -1,3 +1,4 @@
+const { timedLrc } = require('../lyric-formats.cjs');
 const QRCode = require('qrcode');
 const { first, joinCookies, searchResult, pageResult, downloadResult } = require('./helpers.cjs');
 module.exports = ({ call }) => ({
@@ -51,8 +52,21 @@ module.exports = ({ call }) => ({
     }
   },
   async lyrics(track, signal) {
-    const b = await call('lyric', { id: track.id }, signal);
-    if (!b.lrc?.lyric) throw Error('No lyrics available');
-    return { original: b.lrc.lyric, translation: b.tlyric?.lyric || '' };
+    let b;
+    try {
+      b = await call('lyric_new', { id: track.id }, signal);
+      if (!b.lrc?.lyric && !b.yrc?.lyric) throw Error('No lyrics available');
+    } catch (error) {
+      signal?.throwIfAborted();
+      b = await call('lyric', { id: track.id }, signal);
+    }
+    const timed = timedLrc(b.yrc?.lyric, 'yrc').original;
+    const original = timed || b.lrc?.lyric || '';
+    if (!original) throw Error('No lyrics available');
+    return {
+      original,
+      translation: b.ytlrc?.lyric || b.tlyric?.lyric || '',
+      pronunciation: b.yromalrc?.lyric || b.romalrc?.lyric || '',
+    };
   },
 });

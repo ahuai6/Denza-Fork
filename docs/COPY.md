@@ -152,3 +152,10 @@ Fork 设置中的用途提醒仅提示用户自行管理文件，不表示下载
 - 期望音质保存用户选择；回退时显示“所选音质不可用，已回退；详见实际音频信息”，同时展示实际文件规格。
 - 音乐平台：同步歌单入口的几何卡片；读取链接：把 Apple Music 链接展开至统一的搜索结果列表。
 - 对应六语文案位于 `src/app/online/words.ts`：`on.lyricFields`、`on.fields.*`、`on.appleLink`、`on.readLink`、`on.platforms`、`on.qualityFallback`、`on.convertedTtml`。
+
+### Denza 第三版歌词与空间入口
+
+- 在线：空间左上角的独立入口，完整窗口仍称“在线音乐”。文案键 `on.short`。
+- 使用完整歌词：取回来源实际提供的原词、翻译和发音，文案键 `on.useFullLyrics` / `on.fullTracksHelp`。
+- 仅在来源提供原生 TTML 时写入：不再使用 LRC 转换的合成 TTML，文案键 `on.nativeTtmlOnly`。旧下载历史中的转换提示保留以准确描述旧任务。
+- 平台入口是原创几何图形，颜色按用户选择：网易云红、QQ 绿、酷狗蓝、Apple Music 黑白；不使用官方标志文件或苹果轮廓。
