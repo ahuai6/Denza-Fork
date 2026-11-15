@@ -2,7 +2,7 @@ const { readJSON } = require('./json-client.cjs');
 const { downloadResult } = require('./providers/helpers.cjs');
 // Reference endpoints from Sonora; maintained here independently and never receive account credentials.
 function createPublicResolver(fetcher) {
-  return async (track, quality, signal) => {
+  return async (track, quality, signal, excluded = []) => {
     const kbps = { standard: 128, high: 320, lossless: 999, hires: 1999 }[quality];
     const sources = [];
     if (track.platform === 'netease')
@@ -27,7 +27,7 @@ function createPublicResolver(fetcher) {
       params: { server: track.platform, type: 'url', id: track.id, br: String(kbps) },
       kind: 'redirect',
     });
-    for (const source of sources) {
+    for (const source of sources.filter((source) => !excluded.includes(source.name))) {
       signal?.throwIfAborted();
       const url = new URL(source.url);
       for (const [key, value] of Object.entries(source.params)) url.searchParams.set(key, value);
@@ -39,14 +39,14 @@ function createPublicResolver(fetcher) {
           });
           await response.body?.cancel();
           if (!response.ok || response.url === url.href) throw Error('No audio redirect');
-          return { ...downloadResult({ url: response.url }), source: source.name };
+          return { ...downloadResult({ url: response.url }), source: source.name, canFallback: true };
         }
         const body = await readJSON(fetcher, url.href, { signal });
         const row = source.kind === 'netease' ? body.data?.[0] : body.data?.result || body.data;
         if (row?.id && String(row.id) !== String(track.id)) throw Error('Different song returned');
         if (source.kind === 'netease' && row?.code && row.code !== 200) throw Error('No available audio');
         const result = downloadResult(row);
-        return { ...result, source: source.name, bitrate: Number(row.br || row.bitrate) || 0 };
+        return { ...result, source: source.name, canFallback: true, bitrate: Number(row.br || row.bitrate) || 0 };
       } catch {
         signal?.throwIfAborted();
       }

@@ -232,3 +232,54 @@ describe('file-source recovery', () => {
     }
   });
 });
+
+describe('multiple HTTP source recovery', () => {
+  it('continues from a failed public file URL to the next source at the same quality', async () => {
+    const { Platforms } = require('../../electron/platforms.cjs');
+    const dir = await mkdtemp(join(tmpdir(), 'denza-public-source-'));
+    try {
+      const body = await readFile(resolve('tests/fixtures/online-audio/tone.flac'));
+      const seen: string[][] = [];
+      const platforms = new Platforms(
+        { data: { device: {} }, credential: () => ({ cookie: '' }) },
+        async () => {
+          throw Error('SDK offline');
+        },
+        null,
+        {
+          fallback: async (_track: unknown, _quality: string, _signal: unknown, excluded: string[] = []) => {
+            seen.push(excluded);
+            return excluded.includes('JerryMusicAPI')
+              ? { url: 'https://mxin.example/full', source: 'Mxin' }
+              : { url: 'https://jerry.example/missing', source: 'JerryMusicAPI', canFallback: true };
+          },
+        },
+      );
+      const manager = new Downloads(
+        { data: { jobs: [], folder: dir }, save: async () => {} },
+        platforms,
+        { importDownload: async () => {} },
+        () => {},
+        async (url: string) => (url.includes('jerry') ? new Response(null, { status: 404 }) : new Response(body)),
+      );
+      const job: any = {
+        id: 'public-source',
+        track: { ...track, platform: 'netease' },
+        quality: 'lossless',
+        lyricsMode: 'none',
+        folder: dir,
+        status: 'queued',
+      };
+      await manager.run(job, new AbortController());
+      expect(job).toMatchObject({
+        status: 'completed',
+        quality: 'lossless',
+        resolvedQuality: 'lossless',
+        source: 'Mxin',
+      });
+      expect(seen).toEqual([[], ['JerryMusicAPI']]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

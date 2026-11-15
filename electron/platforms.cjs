@@ -98,7 +98,7 @@ class Platforms {
     if (!['standard', 'high', 'lossless', 'hires'].includes(quality)) throw Error('Unknown quality');
     if (alternate) {
       if (!this.services.fallback) throw Error('No alternate audio service');
-      return this.services.fallback(track, quality, signal);
+      return this.services.fallback(track, quality, signal, Array.isArray(alternate) ? alternate : []);
     }
     try {
       const result = await this.provider(track.platform).resolve(track, quality, signal);

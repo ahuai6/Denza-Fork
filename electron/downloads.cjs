@@ -232,8 +232,11 @@ class Downloads {
           if (temp) await fs.promises.rm(temp, { force: true }).catch(() => {});
           temp = null;
           if (controller.signal.aborted) throw error;
-          if (canFallback && !alternate) {
-            attempts.splice(attempts.indexOf(attempt) + 1, 0, { quality, alternate: true });
+          if (canFallback) {
+            attempts.splice(attempts.indexOf(attempt) + 1, 0, {
+              quality,
+              alternate: [...(Array.isArray(alternate) ? alternate : []), job.source],
+            });
           } else {
             if (quality === 'standard') throw error;
             job.fallbackReason = 'The selected quality is unavailable; trying the next tier';
