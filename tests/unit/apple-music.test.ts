@@ -363,3 +363,48 @@ describe('simplified Chinese metadata policy', () => {
     expect(tracks[0].title).toBe('English');
   });
 });
+
+describe('public-link metadata enrichment availability', () => {
+  const provider = require('../../electron/online/providers/apple.cjs');
+  const tracks = [{ id: '123', catalogId: '123', storefront: 'us', title: 'Source name' }];
+  it('uses localized metadata when the catalog is available', async () => {
+    const p = provider(
+      {},
+      {
+        localizeSongs: async (input: typeof tracks, signal: AbortSignal) => {
+          expect(input).toBe(tracks);
+          expect(signal).toBeInstanceOf(AbortSignal);
+          return [{ ...input[0], title: '简体名称' }];
+        },
+      },
+      { lookup: async () => tracks },
+    );
+    expect((await p.lookup('fixture'))[0].title).toBe('简体名称');
+  });
+  it('keeps the valid original collection when metadata is unavailable', async () => {
+    const p = provider(
+      {},
+      {
+        localizeSongs: async () => {
+          throw Error('Catalog unavailable');
+        },
+      },
+      { lookup: async () => tracks },
+    );
+    expect(await p.lookup('fixture')).toBe(tracks);
+  });
+  it('never treats explicit user cancellation as a metadata fallback', async () => {
+    const cancel = new AbortController();
+    const p = provider(
+      {},
+      {
+        localizeSongs: async () => {
+          cancel.abort(Error('User cancelled'));
+          throw Error('Aborted');
+        },
+      },
+      { lookup: async () => tracks },
+    );
+    await expect(p.lookup('fixture', cancel.signal)).rejects.toThrow('User cancelled');
+  });
+});
