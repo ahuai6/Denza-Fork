@@ -62,7 +62,11 @@ class CodexText {
   async launch() {
     const cwd = path.join(this.directory, 'isolated');
     await fs.mkdir(cwd, { recursive: true });
-    const cli = path.join(path.dirname(require.resolve('@openai/codex/package.json')), 'bin', 'codex.js');
+    // The CLI spawns its own native binary. Start from the physical unpacked tree so its resolver never returns ASAR paths.
+    const packageFile = require
+      .resolve('@openai/codex/package.json')
+      .replace(/([\\/])app\.asar([\\/])/, '$1app.asar.unpacked$2');
+    const cli = path.join(path.dirname(packageFile), 'bin', 'codex.js');
     const environment = Object.fromEntries(
       Object.entries(process.env).filter(([k]) => !/^(OPENAI_|CODEX_|CHATGPT_|DEEPSEEK_|RUST_LOG$)/i.test(k)),
     );
