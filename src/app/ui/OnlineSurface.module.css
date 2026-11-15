@@ -1,0 +1,79 @@
+/* The space controls use the same white outlines and transparent fills as its native HUD.
+   Only floating surfaces get .card: the space renderer supplies their mosaic and frame. */
+.space {
+  --fg: #fff;
+  --fg-2: rgba(255, 255, 255, 0.85);
+  --fg-3: rgba(255, 255, 255, 0.65);
+  --line: rgba(255, 255, 255, 0.35);
+  --line-2: rgba(255, 255, 255, 0.7);
+  --hover: rgba(255, 255, 255, 0.16);
+  --pick: rgba(255, 255, 255, 0.28);
+  --on-pick: #fff;
+  color: #fff;
+  font-family: var(--zh);
+  text-shadow:
+    0 0 2px rgba(38, 28, 18, 0.55),
+    0 1px 6px rgba(38, 28, 18, 0.32);
+}
+.space button[data-kind],
+.space button[role='combobox'] {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+.space button[data-kind='primary'],
+.space button[aria-pressed='true'],
+.space button[aria-expanded='true'] {
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 0 0 1.5px #fff;
+}
+.space button[data-kind]:hover:not(:disabled),
+.space button[role='combobox']:hover {
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 0 0 1.5px #fff;
+}
+.space.space input:not([type='checkbox']),
+.space.space textarea {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+.space input::placeholder,
+.space textarea::placeholder {
+  color: rgba(255, 255, 255, 0.8);
+}
+.space input[type='checkbox'],
+.space progress {
+  accent-color: #fff;
+}
+.space:global(.card),
+.space :global(.card) {
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: 0 8px 24px -12px rgba(38, 28, 18, 0.45);
+}
+.lite:global(.card),
+.lite :global(.card) {
+  background: rgba(60, 48, 36, 0.38);
+  box-shadow:
+    0 0 0 1.5px rgba(255, 255, 255, 0.8),
+    0 8px 24px -12px rgba(38, 28, 18, 0.45);
+}
+.space[role='listbox'] > [role='option'][aria-selected='true'],
+.space[role='listbox'] > [role='option'][data-hi] {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.22);
+}
+/* Platform artwork keeps its own ink, as album artwork does; the surrounding controls remain scene-native. */
+.space [data-platform='netease'] {
+  color: #e7373e;
+}
+.space [data-platform='qq'] {
+  color: #1dbf76;
+}
+.space [data-platform='kugou'] {
+  color: #168ee0;
+}
+.space [data-platform='apple'] {
+  color: #fff;
+}

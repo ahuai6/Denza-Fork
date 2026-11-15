@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { cleanBlankLyricRows, isTtml } from '../../engine';
 import { tx } from '../../i18n';
 import { Lib, type LyricsFound } from '../bridge';
 import { SearchSongs } from './OnlineMusic';
@@ -31,7 +32,7 @@ export function OnlineLyricsSearch({
     setError('');
     setBusy(true);
     try {
-      await apply(text);
+      await apply(isTtml(text) ? text : cleanBlankLyricRows(text));
     } catch (e) {
       if (alive.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -50,6 +51,7 @@ export function OnlineLyricsSearch({
       {source === 'platforms' ? (
         <SearchSongs
           initialQuery={song.title}
+          initialArtist={song.artist}
           onLyrics={(lyrics) => use(lyrics.ttml || lyrics.lrc || lyrics.original)}
         />
       ) : (
@@ -89,7 +91,7 @@ export function OnlineLyricsSearch({
               </Button>
               {picked === result.id && !result.instrumental && (
                 <>
-                  <pre>{result.synced || result.plain}</pre>
+                  <pre>{cleanBlankLyricRows(result.synced || result.plain)}</pre>
                   <Button disabled={busy} onClick={() => void use(result.synced || result.plain)}>
                     {tx('s.lyr.use')}
                   </Button>

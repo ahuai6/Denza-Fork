@@ -45,6 +45,7 @@ export { isTtml, ttmlToLrc } from '../lyrics/ttml';
 export { subLines, splitBrackets } from '../lyrics/subs';
 export {
   translationLines,
+  cleanBlankLyricRows,
   translationLrc,
   mergeTranslations,
   readTranslationPaste,

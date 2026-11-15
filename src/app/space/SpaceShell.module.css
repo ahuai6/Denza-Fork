@@ -16,3 +16,37 @@
   top: var(--space-online-top, 68px);
   z-index: 80;
 }
+
+.onlineControl > button {
+  border-radius: var(--r-pill);
+}
+.playlistSwitch {
+  top: calc(84px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px;
+  border-radius: var(--r-pill);
+  max-width: calc(100% - 32px);
+}
+.playlistSwitch button {
+  min-height: 34px;
+  padding: 0 18px;
+  border-radius: var(--r-pill);
+  background: transparent;
+  cursor: pointer;
+}
+.playlistSwitch button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.playlistSwitch button[aria-pressed='true'] {
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 0 0 1.5px #fff;
+}
+.playlistSwitch small {
+  padding: 8px 12px;
+  align-self: center;
+}
