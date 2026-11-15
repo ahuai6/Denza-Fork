@@ -12,6 +12,9 @@ const root = path.join(resources, 'app.asar');
     catalog.map((entry) => entry.id),
     ['netease', 'qq', 'kugou', 'apple'],
   );
+  const { downloadLyricFormats } = require(path.join(root, 'electron/generated/lyrics.cjs'));
+  assert(downloadLyricFormats('[00:01]Synthetic').ttml.includes('<tt '), 'Missing packaged lyric conversion');
+  require(path.join(root, 'electron/online/tags.cjs'));
   const { loadSDK } = require(path.join(root, 'electron/online/sdk-loaders.cjs'));
   for (const [platform, method] of [
     ['netease', 'cloudsearch'],

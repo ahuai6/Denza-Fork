@@ -151,292 +151,306 @@ export function TranslationEditor({ source, song, apply, close }: Props) {
             </Button>
           ))}
         </nav>
-        {mode === 'online' && (
-          <>
-            <details open={!provider.model}>
-              <summary>{tx('tr.provider')}</summary>
-              <div className={s.stack}>
-                <Dropdown
-                  label={tx('tr.provider')}
-                  value={provider.kind}
-                  onChange={(v) =>
-                    setProvider({
-                      ...defaults,
-                      kind: v as TranslationProvider['kind'],
-                      baseURL:
-                        v === 'openai'
-                          ? 'https://api.openai.com/v1'
-                          : v === 'deepseek'
-                            ? 'https://api.deepseek.com'
-                            : '',
-                      protocol: v === 'openai' || v === 'codex' ? 'responses' : 'chat',
-                    })
-                  }
-                  options={['openai', 'compatible', 'deepseek', 'codex'].map((k) => [
-                    k,
-                    k === 'compatible'
-                      ? 'OpenAI compatible'
-                      : k === 'openai'
-                        ? 'OpenAI'
-                        : k === 'deepseek'
-                          ? 'DeepSeek'
-                          : 'Codex',
-                  ])}
-                />
-                {provider.kind !== 'codex' && (
-                  <>
-                    {provider.kind === 'compatible' && (
-                      <label>
-                        Base URL
-                        <input
-                          value={provider.baseURL}
-                          onChange={(e) => setProvider({ ...provider, baseURL: e.target.value })}
-                        />
-                      </label>
-                    )}
+        <div className={s.editorLayout}>
+          <section className={s.stack}>
+            {mode === 'online' && (
+              <>
+                <details open={!provider.model}>
+                  <summary>{tx('tr.provider')}</summary>
+                  <div className={s.providerForm}>
                     <Dropdown
-                      label="API"
-                      value={provider.protocol}
-                      onChange={(v) => setProvider({ ...provider, protocol: v as TranslationProvider['protocol'] })}
-                      options={[
-                        ['responses', 'Responses'],
-                        ['chat', 'Chat Completions'],
-                      ]}
+                      label={tx('tr.provider')}
+                      value={provider.kind}
+                      onChange={(v) =>
+                        setProvider({
+                          ...defaults,
+                          kind: v as TranslationProvider['kind'],
+                          baseURL:
+                            v === 'openai'
+                              ? 'https://api.openai.com/v1'
+                              : v === 'deepseek'
+                                ? 'https://api.deepseek.com'
+                                : '',
+                          protocol: v === 'openai' || v === 'codex' ? 'responses' : 'chat',
+                        })
+                      }
+                      options={['openai', 'compatible', 'deepseek', 'codex'].map((k) => [
+                        k,
+                        k === 'compatible'
+                          ? 'OpenAI compatible'
+                          : k === 'openai'
+                            ? 'OpenAI'
+                            : k === 'deepseek'
+                              ? 'DeepSeek'
+                              : 'Codex',
+                      ])}
                     />
+                    {provider.kind !== 'codex' && (
+                      <>
+                        {provider.kind === 'compatible' && (
+                          <label>
+                            Base URL
+                            <input
+                              value={provider.baseURL}
+                              onChange={(e) => setProvider({ ...provider, baseURL: e.target.value })}
+                            />
+                          </label>
+                        )}
+                        <Dropdown
+                          label="API"
+                          value={provider.protocol}
+                          onChange={(v) => setProvider({ ...provider, protocol: v as TranslationProvider['protocol'] })}
+                          options={[
+                            ['responses', 'Responses'],
+                            ['chat', 'Chat Completions'],
+                          ]}
+                        />
+                        <label>
+                          {tx('tr.key')}
+                          <input
+                            type="password"
+                            autoComplete="off"
+                            value={key}
+                            onChange={(e) => setKey(e.target.value)}
+                          />
+                        </label>
+                      </>
+                    )}
                     <label>
-                      {tx('tr.key')}
-                      <input type="password" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} />
+                      {tx('tr.model')}
+                      <input
+                        value={provider.model}
+                        onChange={(e) => setProvider({ ...provider, model: e.target.value })}
+                        list="denza-models"
+                      />
                     </label>
-                  </>
-                )}
-                <label>
-                  {tx('tr.model')}
-                  <input
-                    value={provider.model}
-                    onChange={(e) => setProvider({ ...provider, model: e.target.value })}
-                    list="denza-models"
-                  />
-                </label>
-                <datalist id="denza-models">
-                  {models.map((m) => (
-                    <option key={m} value={m} />
-                  ))}
-                </datalist>
-                <div className={s.toolbar}>
-                  <Button disabled={busy} onClick={() => void act(saveProvider)}>
-                    {tx('tr.saveProvider')}
-                  </Button>
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      void act(async () => {
-                        await saveProvider();
-                        const value = await request<string[]>('models');
-                        if (alive.current) setModels(value);
-                      })
-                    }
-                  >
-                    {tx('tr.models')}
-                  </Button>
-                  {provider.kind === 'codex' && (
-                    <>
+                    <datalist id="denza-models">
+                      {models.map((m) => (
+                        <option key={m} value={m} />
+                      ))}
+                    </datalist>
+                    <div className={s.toolbar}>
+                      <Button disabled={busy} onClick={() => void act(saveProvider)}>
+                        {tx('tr.saveProvider')}
+                      </Button>
                       <Button
                         disabled={busy}
                         onClick={() =>
                           void act(async () => {
                             await saveProvider();
-                            const value = await request<{ connected: boolean }>('codex', { action: 'login' });
-                            if (alive.current) setConnected(value.connected);
+                            const value = await request<string[]>('models');
+                            if (alive.current) setModels(value);
                           })
                         }
                       >
-                        {tx(connected ? 'tr.connected' : 'tr.signin')}
+                        {tx('tr.models')}
                       </Button>
-                      <Button
-                        disabled={busy}
-                        onClick={() =>
-                          void act(async () => {
-                            const value = await request<{ connected: boolean }>('codex', { action: 'status' });
-                            if (alive.current) {
-                              setConnected(value.connected);
-                              setStatus(tx(value.connected ? 'tr.connected' : 'tr.signin'));
+                      {provider.kind === 'codex' && (
+                        <>
+                          <Button
+                            disabled={busy}
+                            onClick={() =>
+                              void act(async () => {
+                                await saveProvider();
+                                const value = await request<{ connected: boolean }>('codex', { action: 'login' });
+                                if (alive.current) setConnected(value.connected);
+                              })
                             }
-                          })
-                        }
-                      >
-                        {tx('on.check')}
-                      </Button>
-                      <Button
-                        disabled={busy}
-                        onClick={() =>
-                          void act(async () => {
-                            await request('codex', { action: 'logout' });
-                            setConnected(false);
-                          })
-                        }
-                      >
-                        {tx('on.logout')}
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </details>
-            <label>
-              {tx('tr.language')}
-              <input value={language} maxLength={80} onChange={(e) => setLanguage(e.target.value)} />
-            </label>
-            <label>
-              {tx('tr.context')}
-              <textarea value={context} maxLength={8000} onChange={(e) => setContext(e.target.value)} />
-            </label>
-            <Button
-              disabled={busy || !lines.length || locked.length === lines.length || !language.trim()}
-              onClick={() => void translate()}
-            >
-              {tx(busy ? 'on.wait' : 'tr.online')}
-            </Button>
-          </>
-        )}
-        {mode === 'search' && (
-          <SearchSongs
-            onReferences={(refs) => {
-              setExtra((v) => [...v, ...refs]);
-              setMode('paste');
-            }}
-          />
-        )}
-        {mode === 'paste' && (
-          <>
-            <label>
-              {tx('tr.paste')}
-              <textarea className={s.paste} value={paste} onChange={(e) => setPaste(e.target.value)} />
-            </label>
-            <label>
-              {tx('tr.offset')}
-              <input type="number" value={shift} step="0.01" onChange={(e) => setShift(+e.target.value || 0)} />
-            </label>
-            <Button
-              disabled={!fragments.length || busy}
-              onClick={() => useMatches(matchTranslations(lines, fragments, shift))}
-            >
-              {tx('tr.match')}
-            </Button>
-            <div className={s.columns}>
-              <div className={s.rows}>
-                {lines.map((l) => (
-                  <Button
-                    key={l.id}
-                    aria-pressed={l.id === selectedLine}
-                    onClick={() => {
-                      setSelectedLine(l.id);
-                      setSelectedFragments(matches.find((m) => m.id === l.id)?.fragments || []);
-                    }}
-                  >
-                    {l.text}
-                  </Button>
-                ))}
-              </div>
-              <div className={s.rows}>
-                {fragments.map((f) => (
-                  <label key={f.index}>
-                    <input
-                      type="checkbox"
-                      checked={selectedFragments.includes(f.index)}
-                      onChange={(e) =>
-                        setSelectedFragments((v) =>
-                          e.target.checked ? [...v, f.index] : v.filter((i) => i !== f.index),
-                        )
-                      }
-                    />
-                    {f.text}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <Button
-              disabled={!selectedLine || locked.includes(selectedLine)}
-              onClick={() => {
-                const retained = matches.filter(
-                  (m) => m.id !== selectedLine && !m.fragments.some((i) => selectedFragments.includes(i)),
-                );
-                const next = selectedFragments.length
-                  ? [
-                      ...retained,
-                      {
-                        id: selectedLine,
-                        fragments: [...selectedFragments].sort((a, b) => a - b),
-                        evidence: 'manual' as const,
-                      },
-                    ]
-                  : retained;
-                const displaced = matches
-                  .filter((m) => m.id !== selectedLine && m.fragments.some((i) => selectedFragments.includes(i)))
-                  .map((m) => m.id);
-                setValues((v) => ({ ...v, ...Object.fromEntries([...displaced, selectedLine].map((id) => [id, ''])) }));
-                useMatches(next);
-              }}
-            >
-              {tx('tr.manual')}
-            </Button>
-          </>
-        )}
-        {status && <Note>{status}</Note>}
-        <div className={s.translation}>
-          {lines.map((l) => (
-            <div key={l.id} className={s.preview}>
-              <div className={s.toolbar}>
-                <b>{l.text}</b>
+                          >
+                            {tx(connected ? 'tr.connected' : 'tr.signin')}
+                          </Button>
+                          <Button
+                            disabled={busy}
+                            onClick={() =>
+                              void act(async () => {
+                                const value = await request<{ connected: boolean }>('codex', { action: 'status' });
+                                if (alive.current) {
+                                  setConnected(value.connected);
+                                  setStatus(tx(value.connected ? 'tr.connected' : 'tr.signin'));
+                                }
+                              })
+                            }
+                          >
+                            {tx('on.check')}
+                          </Button>
+                          <Button
+                            disabled={busy}
+                            onClick={() =>
+                              void act(async () => {
+                                await request('codex', { action: 'logout' });
+                                setConnected(false);
+                              })
+                            }
+                          >
+                            {tx('on.logout')}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </details>
                 <label>
-                  <input
-                    type="checkbox"
-                    checked={locked.includes(l.id)}
-                    aria-label={tx('tr.lock')}
-                    onChange={(e) =>
-                      setLocked((v) => (e.target.checked ? [...v, l.id] : v.filter((id) => id !== l.id)))
-                    }
-                  />
-                  {tx('tr.lock')}
+                  {tx('tr.language')}
+                  <input value={language} maxLength={80} onChange={(e) => setLanguage(e.target.value)} />
                 </label>
-              </div>
-              <textarea
-                aria-label={l.text}
-                disabled={locked.includes(l.id) || busy}
-                value={values[l.id] || ''}
-                onChange={(e) => {
-                  setValues({ ...values, [l.id]: e.target.value });
-                  setDirty(true);
+                <label>
+                  {tx('tr.context')}
+                  <textarea value={context} maxLength={8000} onChange={(e) => setContext(e.target.value)} />
+                </label>
+                <Button
+                  disabled={busy || !lines.length || locked.length === lines.length || !language.trim()}
+                  onClick={() => void translate()}
+                >
+                  {tx(busy ? 'on.wait' : 'tr.online')}
+                </Button>
+              </>
+            )}
+            {mode === 'search' && (
+              <SearchSongs
+                onReferences={(refs) => {
+                  setExtra((v) => [...v, ...refs]);
+                  setMode('paste');
                 }}
               />
-              <small>
-                {matches.find((m) => m.id === l.id)
-                  ? tx('tr.' + matches.find((m) => m.id === l.id)!.evidence)
-                  : tx(values[l.id] ? 'tr.draft' : 'tr.unmatched')}
-              </small>
+            )}
+            {mode === 'paste' && (
+              <>
+                <label>
+                  {tx('tr.paste')}
+                  <textarea className={s.paste} value={paste} onChange={(e) => setPaste(e.target.value)} />
+                </label>
+                <label>
+                  {tx('tr.offset')}
+                  <input type="number" value={shift} step="0.01" onChange={(e) => setShift(+e.target.value || 0)} />
+                </label>
+                <Button
+                  disabled={!fragments.length || busy}
+                  onClick={() => useMatches(matchTranslations(lines, fragments, shift))}
+                >
+                  {tx('tr.match')}
+                </Button>
+                <div className={s.columns}>
+                  <div className={s.rows}>
+                    {lines.map((l) => (
+                      <Button
+                        key={l.id}
+                        aria-pressed={l.id === selectedLine}
+                        onClick={() => {
+                          setSelectedLine(l.id);
+                          setSelectedFragments(matches.find((m) => m.id === l.id)?.fragments || []);
+                        }}
+                      >
+                        {l.text}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className={s.rows}>
+                    {fragments.map((f) => (
+                      <label key={f.index}>
+                        <input
+                          type="checkbox"
+                          checked={selectedFragments.includes(f.index)}
+                          onChange={(e) =>
+                            setSelectedFragments((v) =>
+                              e.target.checked ? [...v, f.index] : v.filter((i) => i !== f.index),
+                            )
+                          }
+                        />
+                        {f.text}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <Button
+                  disabled={!selectedLine || locked.includes(selectedLine)}
+                  onClick={() => {
+                    const retained = matches.filter(
+                      (m) => m.id !== selectedLine && !m.fragments.some((i) => selectedFragments.includes(i)),
+                    );
+                    const next = selectedFragments.length
+                      ? [
+                          ...retained,
+                          {
+                            id: selectedLine,
+                            fragments: [...selectedFragments].sort((a, b) => a - b),
+                            evidence: 'manual' as const,
+                          },
+                        ]
+                      : retained;
+                    const displaced = matches
+                      .filter((m) => m.id !== selectedLine && m.fragments.some((i) => selectedFragments.includes(i)))
+                      .map((m) => m.id);
+                    setValues((v) => ({
+                      ...v,
+                      ...Object.fromEntries([...displaced, selectedLine].map((id) => [id, ''])),
+                    }));
+                    useMatches(next);
+                  }}
+                >
+                  {tx('tr.manual')}
+                </Button>
+              </>
+            )}
+          </section>
+          <section className={s.stack}>
+            {status && <Note>{status}</Note>}
+            <div className={s.translation}>
+              {lines.map((l) => (
+                <div key={l.id} className={s.preview}>
+                  <div className={s.toolbar}>
+                    <b>{l.text}</b>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={locked.includes(l.id)}
+                        aria-label={tx('tr.lock')}
+                        onChange={(e) =>
+                          setLocked((v) => (e.target.checked ? [...v, l.id] : v.filter((id) => id !== l.id)))
+                        }
+                      />
+                      {tx('tr.lock')}
+                    </label>
+                  </div>
+                  <textarea
+                    aria-label={l.text}
+                    disabled={locked.includes(l.id) || busy}
+                    value={values[l.id] || ''}
+                    onChange={(e) => {
+                      setValues({ ...values, [l.id]: e.target.value });
+                      setDirty(true);
+                    }}
+                  />
+                  <small>
+                    {matches.find((m) => m.id === l.id)
+                      ? tx('tr.' + matches.find((m) => m.id === l.id)!.evidence)
+                      : tx(values[l.id] ? 'tr.draft' : 'tr.unmatched')}
+                  </small>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className={s.toolbar}>
-          {busy && task.current && (
-            <Button onClick={() => void request('cancel', { jobId: task.current })}>{tx('on.cancel')}</Button>
-          )}
-          <Button
-            kind="primary"
-            disabled={busy || !dirty || !lines.length || source !== baseline.current}
-            onClick={() => {
-              apply(
-                mergeTranslations(
-                  baseline.current,
-                  Object.fromEntries(
-                    lines.filter((l) => values[l.id] !== l.translation).map((l) => [l.id, values[l.id]]),
-                  ),
-                ),
-              );
-              close();
-            }}
-          >
-            {tx('tr.apply')}
-          </Button>
+            <div className={s.toolbar}>
+              {busy && task.current && (
+                <Button onClick={() => void request('cancel', { jobId: task.current })}>{tx('on.cancel')}</Button>
+              )}
+              <Button
+                kind="primary"
+                disabled={busy || !dirty || !lines.length || source !== baseline.current}
+                onClick={() => {
+                  apply(
+                    mergeTranslations(
+                      baseline.current,
+                      Object.fromEntries(
+                        lines.filter((l) => values[l.id] !== l.translation).map((l) => [l.id, values[l.id]]),
+                      ),
+                    ),
+                  );
+                  close();
+                }}
+              >
+                {tx('tr.apply')}
+              </Button>
+            </div>
+          </section>
         </div>
       </div>
     </OnlineDialog>

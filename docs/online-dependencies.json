@@ -45,6 +45,24 @@
       "source": "https://api.trylyricsflow.com/openapi.json",
       "observedVersion": "2.0.0",
       "adapter": "electron/online/lyricsflow-audio.cjs"
+    },
+    {
+      "id": "jerry-music",
+      "kind": "protocol",
+      "source": "https://music-api.jerrynis.com",
+      "adapter": "electron/online/public-resolvers.cjs"
+    },
+    {
+      "id": "mxin-music",
+      "kind": "protocol",
+      "source": "https://api.mxin.me",
+      "adapter": "electron/online/public-resolvers.cjs"
+    },
+    {
+      "id": "sakurink-meting",
+      "kind": "protocol",
+      "source": "https://apivc-meting.sakurink.eu.org/registration/",
+      "adapter": "electron/online/public-resolvers.cjs"
     }
   ]
 }

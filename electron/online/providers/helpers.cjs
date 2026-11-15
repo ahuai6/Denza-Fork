@@ -27,6 +27,18 @@ const clean = (v) =>
   String(v || '')
     .replace(/<[^>]*>/g, '')
     .trim();
+function imageURL(value) {
+  const url = String(value || '')
+    .replace(/\{(?:size|w|h)\}/g, '500')
+    .replace('{f}', 'jpg')
+    .replace('{c}', 'bb');
+  try {
+    const parsed = new URL(url.startsWith('//') ? 'https:' + url : url);
+    return /^https?:$/.test(parsed.protocol) ? parsed.href.replace(/^http:/, 'https:') : '';
+  } catch {
+    return '';
+  }
+}
 function song(raw, platform) {
   const r = raw.musicData || raw.songInfo || raw;
   const id = first(r, ['mid', 'songmid', 'hash', 'Hash', 'FileHash', 'audio_info.hash', 'id', 'songid']);
@@ -41,6 +53,29 @@ function song(raw, platform) {
   const duration = Number(first(r, ['dt', 'duration', 'timelen', 'timelength', 'interval', 'Duration'], 0));
   return {
     platform,
+    artworkUrl: imageURL(
+      first(r, [
+        'al.picUrl',
+        'album.picUrl',
+        'album.picurl',
+        'picUrl',
+        'Image',
+        'imgurl',
+        'sizable_cover',
+        'flexible_cover',
+        'trans_param.union_cover',
+        'album_info.sizable_cover',
+        'album_info.cover',
+        'cover_url',
+        'image',
+        'img',
+        'pic',
+        'album_info.img',
+      ]) ||
+        (platform === 'qq' && first(r, ['album.mid', 'albummid'])
+          ? 'https://y.gtimg.cn/music/photo_new/T002R500x500M000' + first(r, ['album.mid', 'albummid']) + '.jpg'
+          : ''),
+    ),
     id: String(id),
     title,
     artist,
@@ -60,6 +95,23 @@ function pageResult(rows, kind, platform, body, total, idPaths = ['id', 'tid', '
         : rows
             .map((r) => ({
               id: String(first(r, idPaths)),
+              artworkUrl: imageURL(
+                first(r, [
+                  'coverImgUrl',
+                  'picUrl',
+                  'logo',
+                  'disspic',
+                  'imgurl',
+                  'Image',
+                  'flexible_cover',
+                  'sizable_cover',
+                  'trans_param.union_cover',
+                  'cover_url',
+                  'pic',
+                  'cover',
+                  'img',
+                ]),
+              ),
               name: clean(first(r, ['name', 'dissname', 'specialname', 'title'])),
             }))
             .filter((r) => r.id && r.name),
@@ -83,4 +135,4 @@ function downloadResult(row) {
     throw Error('Only a preview is available');
   return { url: url.href };
 }
-module.exports = { first, cookies, joinCookies, song, pageResult, searchResult, downloadResult };
+module.exports = { first, cookies, joinCookies, song, pageResult, searchResult, downloadResult, imageURL };

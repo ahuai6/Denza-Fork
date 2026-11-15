@@ -40,7 +40,7 @@
     "label": "Apple Music",
     "login": "browser",
     "download": true,
-    "lyrics": false,
+    "lyrics": true,
     "remotePlayback": true,
     "loginLabel": "on.appleSignin",
     "accountHelp": "on.appleHelp",

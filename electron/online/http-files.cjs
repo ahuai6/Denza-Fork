@@ -56,6 +56,6 @@ function httpFile(url, { signal } = {}, redirects = 0) {
 function fetchAudio(url, options, fileTransport = httpFile) {
   return options.transport === 'http-file'
     ? fileTransport(url, { signal: options.signal })
-    : fetch(url, { signal: options.signal });
+    : fetch(url, { signal: options.signal, headers: options.headers, credentials: 'omit' });
 }
 module.exports = { httpFile, fetchAudio };

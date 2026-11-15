@@ -17,6 +17,7 @@ function bridge() {
     accounts: [{ platform: 'netease', uid: 'fixture-user', name: 'Fixture account' }],
     folder: '/fixture/downloads',
     jobs: [],
+    preferences: { qualities: {}, lyricsMode: 'both' },
   };
   const song = {
     platform: 'netease',
@@ -25,6 +26,7 @@ function bridge() {
     artist: 'Fixture artist',
     album: 'Fixture album',
     duration: 180,
+    artworkUrl: 'https://fixture.invalid/artwork.jpg',
   };
   let settings = {
     ui: 'classic',
@@ -68,6 +70,14 @@ function bridge() {
     request: async (op, args = {}) => {
       window.__onlineCalls.push({ op, args });
       if (op === 'state') return state;
+      if (op === 'preferences') {
+        if (args.platform) state.preferences.qualities[args.platform] = args.quality;
+        if (args.lyricsMode) state.preferences.lyricsMode = args.lyricsMode;
+        changed({ ...state });
+        return state.preferences;
+      }
+      if (op === 'lookup')
+        return [{ ...song, platform: 'apple', id: '123', catalogId: '123', title: 'Apple link fixture' }];
       if (op === 'provider' || op === 'setProvider')
         return {
           kind: 'compatible',
@@ -115,7 +125,14 @@ function bridge() {
             name: 'Synced fixture list',
             created: 1,
             tracks: [],
-            remote: { platform: 'netease', uid: 'fixture-user', id: 'remote-list', updated: Date.now(), songs: [song] },
+            remote: {
+              platform: 'netease',
+              uid: 'fixture-user',
+              id: 'remote-list',
+              artworkUrl: 'https://fixture.invalid/artwork.jpg',
+              updated: Date.now(),
+              songs: [song],
+            },
           },
         ];
         libraryChanged(local);
@@ -168,6 +185,9 @@ function bridge() {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   try {
+    await page.route('https://fixture.invalid/artwork.jpg', (route) =>
+      route.fulfill({ path: path.join(__dirname, 'fixtures/cover.jpg'), contentType: 'image/jpeg' }),
+    );
     await page.addInitScript(bridge);
     await page.goto(url + '/index.html');
     await page.locator('[data-test="shelves"]').waitFor();
@@ -176,14 +196,30 @@ function bridge() {
     await music.getByRole('textbox', { name: '搜索歌曲', exact: true }).fill('fixture');
     await music.locator('[data-test="online-search"]').getByRole('button', { name: '搜索歌曲', exact: true }).click();
     await music.getByText('Fixture song', { exact: true }).waitFor();
+    await music.locator('img[src="https://fixture.invalid/artwork.jpg"]').waitFor();
+    await music.getByRole('combobox', { name: '期望音质', exact: true }).click();
+    await page.getByRole('option', { name: '无损', exact: true }).click();
+    await music.getByRole('combobox', { name: '内嵌歌词字段', exact: true }).click();
+    await page.getByRole('option', { name: 'TTML', exact: true }).click();
     await music.getByRole('button', { name: '下载歌曲', exact: true }).click();
     await music.getByRole('button', { name: '下载', exact: true }).click();
     await music.getByText(/FLAC.*24 bit.*96 kHz/).waitFor();
+    assert.equal(await music.getByRole('progressbar').count(), 1);
+    assert.equal(
+      await page.evaluate(() => window.__onlineCalls.find((c) => c.op === 'enqueue').args.quality),
+      'lossless',
+    );
     await page.screenshot({ path: path.join(shots, 'downloads.png') });
     console.log('pass search → download queue → actual quality display');
     await page.locator('[data-section="playlists"]').click();
+    assert.equal(await page.locator('[data-turn="out"]').count(), 0);
     await page.getByRole('button', { name: '同步歌单', exact: true }).click();
+    await page
+      .locator('[data-test="synced-playlists"]')
+      .getByRole('button', { name: /网易云音乐/ })
+      .click();
     await page.getByRole('button', { name: /同步歌单 · Fixture account/ }).click();
+    await page.getByRole('button', { name: /Synced fixture list/ }).click();
     await page.locator('[data-test="synced-playlists"]').getByText('Fixture song', { exact: true }).waitFor();
     assert.equal(
       await page
@@ -211,12 +247,9 @@ function bridge() {
     await music.getByRole('button', { name: '确认登录', exact: true }).click();
     await music.getByText('Apple Music fixture', { exact: true }).waitFor();
     await music.getByRole('button', { name: '同步歌单', exact: true }).click();
+    await music.getByRole('button', { name: /Apple Music.*fixture|Apple Music.*登录/ }).click();
     await music.getByRole('button', { name: /同步歌单 · Apple Music fixture/ }).click();
-    await music
-      .locator('[data-test="synced-playlists"]')
-      .getByRole('combobox', { name: '同步歌单', exact: true })
-      .click();
-    await page.getByRole('option', { name: /Apple fixture playlist/ }).click();
+    await music.getByRole('button', { name: /Apple fixture playlist/ }).click();
     assert.equal(await music.getByRole('button', { name: '下载歌曲', exact: true }).count(), 1);
     await music.getByRole('button', { name: '在浏览器播放', exact: true }).first().click();
     await page.screenshot({ path: path.join(shots, 'apple-playlists.png') });
@@ -229,6 +262,12 @@ function bridge() {
     assert.equal(await music.getByRole('checkbox', { name: 'Apple fixture', exact: true }).isDisabled(), false);
     await music.getByRole('button', { name: '在浏览器播放', exact: true }).click();
     await music.getByRole('button', { name: '下载歌曲', exact: true }).click();
+    await music.getByRole('navigation').getByRole('button', { name: '搜索歌曲', exact: true }).click();
+    await music
+      .getByRole('textbox', { name: '粘贴 Apple Music 歌曲、专辑或歌单链接', exact: true })
+      .fill('https://music.apple.com/us/song/123');
+    await music.getByRole('button', { name: '读取链接', exact: true }).click();
+    await music.getByText('Apple link fixture', { exact: true }).waitFor();
     const appleCalls = await page.evaluate(() => window.__onlineCalls.filter((c) => c.op === 'openRemote'));
     assert(appleCalls.some((c) => c.args.playlistId === 'apple-list'));
     assert(appleCalls.some((c) => c.args.key === 'apple:123'));
@@ -260,6 +299,15 @@ function bridge() {
     });
     await page.getByRole('button', { name: '翻译与匹配', exact: true }).click();
     let dialog = page.getByRole('dialog', { name: '翻译与匹配', exact: true });
+    await dialog.getByRole('button', { name: '预览歌词', exact: true }).click();
+    await dialog.getByRole('combobox', { name: '全部平台', exact: true }).click();
+    await dialog.getByRole('option', { name: 'QQ Music', exact: true }).click();
+    await dialog.getByRole('textbox', { name: '搜索歌曲', exact: true }).fill('fixture');
+    await dialog.getByRole('button', { name: '搜索歌曲', exact: true }).click();
+    await dialog.getByText('Fixture song', { exact: true }).waitFor();
+    await dialog.getByRole('button', { name: '预览歌词', exact: true }).last().click();
+    await dialog.locator('[data-test="online-lyrics-preview"]').waitFor();
+    await page.screenshot({ path: path.join(shots, 'lyric-search.png') });
     await dialog.getByRole('button', { name: '粘贴译文', exact: true }).click();
     await dialog.getByRole('textbox', { name: '粘贴译文', exact: true }).fill('第一句\n第二句');
     await dialog.getByRole('button', { name: '匹配译文', exact: true }).click();

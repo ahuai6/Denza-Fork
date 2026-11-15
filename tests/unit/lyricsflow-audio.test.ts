@@ -135,10 +135,17 @@ describe('public audio file service', () => {
       };
       store.data.jobs.push(invalid);
       await manager.run(invalid, new AbortController());
-      expect(invalid.status).toBe('failed');
-      expect(invalid.error).toContain('different format');
-      expect(imported).toHaveLength(4);
-      expect(requests).toHaveLength(5);
+      expect(invalid.status).toBe('completed');
+      expect(invalid).toMatchObject({ quality: 'hires', resolvedQuality: 'high' });
+      expect((await parseFile(invalid.file)).format.codec).toContain('AAC');
+      expect(imported).toHaveLength(5);
+      expect(requests).toHaveLength(7);
+      // Even the lowest requested tier must fail if its response has the wrong codec.
+      const exhausted = { ...invalid, id: 'all-wrong', file: '', quality: 'standard', status: 'queued' };
+      await manager.run(exhausted, new AbortController());
+      expect(exhausted.status).toBe('failed');
+      expect(exhausted.error).toContain('different format');
+      expect(imported).toHaveLength(5);
       expect(requests.every((request) => !request.cookie && !request.authorization)).toBe(true);
     } finally {
       await manager.close();

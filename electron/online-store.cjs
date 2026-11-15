@@ -7,14 +7,21 @@ class OnlineStore {
   constructor(file, crypto) {
     this.file = file;
     this.crypto = crypto;
-    this.data = { accounts: {}, provider: {}, jobs: [], folder: '', device: {} };
+    this.data = {
+      accounts: {},
+      provider: {},
+      jobs: [],
+      folder: '',
+      device: {},
+      preferences: { qualities: {}, lyricsMode: 'both' },
+    };
     this.saving = Promise.resolve();
   }
   async load() {
     try {
       const value = JSON.parse(await fs.readFile(this.file, 'utf8'));
       if (!value || !value.accounts || !Array.isArray(value.jobs)) throw Error('Invalid online data');
-      this.data = { ...this.data, ...value };
+      this.data = { ...this.data, ...value, preferences: { qualities: {}, lyricsMode: 'both', ...value.preferences } };
     } catch (e) {
       if (e.code !== 'ENOENT') throw Error('Cannot read online data; the original file has been preserved.');
     }

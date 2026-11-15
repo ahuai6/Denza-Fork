@@ -5,7 +5,9 @@ const factories = {
   kugou: require('./kugou.cjs'),
   apple: require('./apple.cjs'),
 };
-function createProviders(host, apple) {
-  return new Map(catalog.map((info) => [info.id, { ...factories[info.id](host(info.id), apple), info }]));
+function createProviders(host, apple, services = {}) {
+  return new Map(
+    catalog.map((info) => [info.id, { ...factories[info.id](host(info.id), apple, services.audio), info }]),
+  );
 }
 module.exports = { createProviders, catalog };

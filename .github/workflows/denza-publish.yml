@@ -15,6 +15,7 @@ permissions:
   contents: write
 jobs:
   publish:
+    if: github.ref == 'refs/heads/custom'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -23,6 +24,11 @@ jobs:
       RELEASE_TAG: ${{ inputs.release_tag }}
       GH_REPO: ${{ github.repository }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: custom
+          fetch-depth: 0
+          persist-credentials: false
       - name: Verify source build and draft release
         shell: bash
         run: |
@@ -30,7 +36,7 @@ jobs:
           [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" > build-run.json
-          jq -e '.conclusion == "success" and .head_branch == "custom" and .path == ".github/workflows/denza-build.yml"' build-run.json
+          jq -e --arg repo "$GH_REPO" '.conclusion == "success" and .repository.full_name == $repo and .path == ".github/workflows/denza-build.yml"' build-run.json
           build_sha=$(jq -r '.head_sha' build-run.json)
           gh api "repos/$GH_REPO/contents/package.json?ref=$build_sha" --jq '.content' | base64 --decode > build-package.json
           version=$(jq -r '.version' build-package.json)
@@ -38,7 +44,14 @@ jobs:
           gh api --paginate "repos/$GH_REPO/releases" | jq --arg tag "$RELEASE_TAG" '.[] | select(.tag_name == $tag)' > draft-release.json
           test -s draft-release.json
           jq -s -e 'length == 1' draft-release.json
-          jq -e --arg sha "$build_sha" '.draft == true and .target_commitish == $sha and (.assets | length) == 0' draft-release.json
+          jq -e '.draft == true and (.assets | length) == 0' draft-release.json
+          release_sha=$(jq -r '.target_commitish' draft-release.json)
+          [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$build_sha" "$release_sha"
+          git merge-base --is-ancestor "$release_sha" HEAD
+          # Reuse only merged builds with identical application, dependencies, tests and build inputs.
+          # These exclusions cannot change the binaries included in the verified artifact.
+          git diff --exit-code "$build_sha" "$release_sha" -- . ':(exclude)docs/**' ':(exclude)AGENTS.md' ':(exclude).github/workflows/denza-publish.yml'
           printf 'VERSION=%s\n' "$version" >> "$GITHUB_ENV"
           printf 'RELEASE_ID=%s\n' "$(jq -r '.id' draft-release.json)" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4

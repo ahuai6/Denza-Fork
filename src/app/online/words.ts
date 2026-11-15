@@ -1,6 +1,53 @@
 import { add } from '../../i18n';
 // Shared by the classic library, space panels and workshop.
 add({
+  'on.lyricFields': [
+    '內嵌歌詞欄位',
+    '内嵌歌词字段',
+    'Embedded lyric fields',
+    '歌詞タグ',
+    '가사 태그',
+    'Campos de letra',
+  ],
+  'on.fields.both': ['LRC + TTML', 'LRC + TTML', 'LRC + TTML', 'LRC + TTML', 'LRC + TTML', 'LRC + TTML'],
+  'on.fields.lrc': ['LRC', 'LRC', 'LRC', 'LRC', 'LRC', 'LRC'],
+  'on.fields.ttml': ['TTML', 'TTML', 'TTML', 'TTML', 'TTML', 'TTML'],
+  'on.fields.none': ['不內嵌', '不内嵌', 'Do not embed', '埋め込まない', '포함 안 함', 'No incrustar'],
+  'on.fields.unavailable': [
+    '未取得歌詞',
+    '未取得歌词',
+    'Lyrics unavailable',
+    '歌詞なし',
+    '가사 없음',
+    'Letra no disponible',
+  ],
+  'on.appleLink': [
+    '貼上 Apple Music 歌曲、專輯或歌單連結',
+    '粘贴 Apple Music 歌曲、专辑或歌单链接',
+    'Paste an Apple Music song, album or playlist link',
+    'Apple Music リンク',
+    'Apple Music 링크',
+    'Enlace de Apple Music',
+  ],
+  'on.readLink': ['讀取連結', '读取链接', 'Read link', 'リンクを読む', '링크 읽기', 'Leer enlace'],
+  'on.platforms': ['音樂平台', '音乐平台', 'Music platforms', '音楽サービス', '음악 플랫폼', 'Plataformas'],
+  'on.qualityFallback': [
+    '所選音質不可用，已回退；詳見實際音訊資訊',
+    '所选音质不可用，已回退；详见实际音频信息',
+    'Selected quality unavailable; see the actual audio details',
+    '音質を下げました。実際の音声情報をご確認ください',
+    '선택한 음질을 사용할 수 없어 낮췄습니다',
+    'Calidad reducida; consulta los detalles del audio',
+  ],
+  'on.convertedTtml': [
+    '由 LRC 轉換，非原生逐字時間',
+    '由 LRC 转换，非原生逐字时间',
+    'Converted from LRC; no native word timing',
+    'LRC から変換',
+    'LRC에서 변환',
+    'Convertido desde LRC',
+  ],
+
   'on.forkTitle': ['Denza-Fork', 'Denza-Fork', 'Denza-Fork', 'Denza-Fork', 'Denza-Fork', 'Denza-Fork'],
   'on.studyNotice': [
     '內容僅供個人學習使用，請於下載後24小時內自行刪除',

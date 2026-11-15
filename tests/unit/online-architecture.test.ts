@@ -32,7 +32,7 @@ const fixtures: Record<string, { raw: object; search: string; page: string; reso
   kugou: {
     raw: { Hash: 'k1', FileName: 'Artist - Song', Duration: 180 },
     search: 'search',
-    page: 'playlist_track_all',
+    page: 'playlist_track_all_new',
     resolve: 'song_url',
     lyric: 'search_lyric',
   },
@@ -116,7 +116,7 @@ describe('online module boundaries', () => {
       const page = await providers.page(platform, 'songs', 'list', 1);
       expect(page.rows[0]).toEqual(songs[0]);
       expect(page.total).toBe(1);
-      expect(await providers.resolve(songs[0], 'lossless')).toEqual({ url: 'https://audio.example/full' });
+      expect(await providers.resolve(songs[0], 'lossless')).toMatchObject({ url: 'https://audio.example/full' });
       expect(await providers.lyrics(songs[0])).toMatchObject({ original: '[00:01]Original' });
       expect(calls.map((call) => call.method)).toContain(fixture.resolve);
       const payload = calls.find((call) => call.method === fixture.resolve)!.query;

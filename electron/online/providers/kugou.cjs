@@ -2,6 +2,7 @@ const { randomBytes } = require('node:crypto');
 const QRCode = require('qrcode');
 const { first, cookies, searchResult, pageResult, downloadResult } = require('./helpers.cjs');
 module.exports = ({ call, getDevice, setDevice }) => {
+  const publicIds = new Map();
   const device = async (signal) => {
     if (getDevice().dfid) return;
     await setDevice({
@@ -53,23 +54,36 @@ module.exports = ({ call, getDevice, setDevice }) => {
     },
     async page(kind, id, page, signal, uid) {
       await device(signal);
-      const b = await call(
-        kind === 'lists' ? 'user_playlist' : 'playlist_track_all',
-        kind === 'lists' ? { userid: uid, page, pagesize: 100 } : { id, page, pagesize: 100 },
-        signal,
-      );
+      let b;
+      if (kind === 'lists') b = await call('user_playlist', { userid: uid, page, pagesize: 100 }, signal);
+      else {
+        try {
+          b = await call('playlist_track_all_new', { listid: id, userid: uid, page, pagesize: 100 }, signal);
+        } catch (error) {
+          signal?.throwIfAborted();
+          const publicId = publicIds.get(id);
+          if (!publicId) throw error;
+          b = await call('playlist_track_all', { id: publicId, page, pagesize: 100 }, signal);
+        }
+      }
       const rows = first(
         b,
-        kind === 'lists' ? ['data.info', 'data.list'] : ['data.songs', 'data.info', 'data.list'],
+        kind === 'lists' ? ['data.info', 'data.list'] : ['data.songs', 'data.info', 'data.list', 'data.files'],
         null,
       );
+      if (kind === 'lists' && Array.isArray(rows))
+        for (const row of rows) {
+          const local = String(first(row, ['listid', 'id']));
+          const global = first(row, ['global_collection_id', 'globalCollectionId', 'gid']);
+          if (local && global) publicIds.set(local, String(global));
+        }
       return pageResult(rows, kind, 'kugou', b, first(b, ['data.total', 'data.count'], null), [
+        'listid',
+        'id',
         'gid',
         'global_collection_id',
         'globalCollectionId',
-        'id',
         'specialid',
-        'listid',
       ]);
     },
     async resolve(track, quality, signal) {

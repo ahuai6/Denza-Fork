@@ -145,3 +145,10 @@ Windows 安裝程式是 Cadenza 自己畫的三頁（`build/installer.nsh`，圖
 新增界面文字的六语言对照集中在 `src/app/online/words.ts`，两种界面与工坊共用。
 
 Fork 设置中的用途提醒仅提示用户自行管理文件，不表示下载授权、免责或自动删除。AM 的 MP3/AAC/FLAC/ALAC 标签表示期望文件格式，不承诺源音质或高采样率。
+
+### Denza 下载与平台卡片
+
+- 内嵌歌词字段：LRC + TTML / LRC / TTML / 不内嵌。未取得歌词应明确显示；LRC 转 TTML 显示“由 LRC 转换，非原生逐字时间”。
+- 期望音质保存用户选择；回退时显示“所选音质不可用，已回退；详见实际音频信息”，同时展示实际文件规格。
+- 音乐平台：同步歌单入口的几何卡片；读取链接：把 Apple Music 链接展开至统一的搜索结果列表。
+- 对应六语文案位于 `src/app/online/words.ts`：`on.lyricFields`、`on.fields.*`、`on.appleLink`、`on.readLink`、`on.platforms`、`on.qualityFallback`、`on.convertedTtml`。

@@ -37,11 +37,22 @@ module.exports = ({ call }) => ({
   },
   async resolve(track, quality, signal) {
     const level = { standard: 'standard', high: 'exhigh', lossless: 'lossless', hires: 'hires' }[quality];
-    const b = await call('song_url_v1', { id: track.id, level }, signal);
-    return downloadResult(b.data?.[0]);
+    try {
+      const b = await call('song_url_v1', { id: track.id, level }, signal);
+      return downloadResult(b.data?.[0]);
+    } catch (error) {
+      signal?.throwIfAborted();
+      const b = await call(
+        'song_download_url',
+        { id: track.id, br: { standard: 128000, high: 320000, lossless: 999000, hires: 1999000 }[quality] },
+        signal,
+      );
+      return downloadResult(Array.isArray(b.data) ? b.data[0] : b.data);
+    }
   },
   async lyrics(track, signal) {
     const b = await call('lyric', { id: track.id }, signal);
-    return { original: b.lrc?.lyric || '', translation: b.tlyric?.lyric || '' };
+    if (!b.lrc?.lyric) throw Error('No lyrics available');
+    return { original: b.lrc.lyric, translation: b.tlyric?.lyric || '' };
   },
 });
