@@ -10,23 +10,42 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 26
-      - name: Check and build Windows applications
+          cache: npm
+      - name: Install dependencies
+        shell: bash
+        run: npm ci
+      - name: Check types and unit tests
         shell: bash
         run: |
-          npm ci
           npm run typecheck
           npm test
+      - name: Build app and fetch verified model resources
+        shell: bash
+        run: |
           npm run build:app
           node scripts/models.mjs
+      - name: Build native Windows audio engine
+        shell: bash
+        run: |
           cargo build --locked --release --manifest-path native/cadenza-audio/Cargo.toml
           mkdir -p native/cadenza-audio/target/x86_64-pc-windows-gnu/release
           cp native/cadenza-audio/target/release/cadenza-audio.exe native/cadenza-audio/target/x86_64-pc-windows-gnu/release/
-          npx electron-builder --win --x64 --publish never
+      - name: Package installer and portable app
+        shell: bash
+        run: npx electron-builder --win --x64 --publish never
+      - name: Check packaged modules and text runtime
+        timeout-minutes: 2
+        shell: pwsh
+        run: |
+          $env:ELECTRON_RUN_AS_NODE = '1'
+          & './release/win-unpacked/Cadenza.exe' './scripts/packaged-smoke.cjs' './release/win-unpacked/resources'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Record build checksums
         shell: pwsh
         run: |
