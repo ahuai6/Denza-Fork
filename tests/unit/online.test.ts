@@ -17,20 +17,21 @@ const { song, Platforms } = require('../../electron/platforms.cjs');
 const { commit, audioExtension } = require('../../electron/downloads.cjs');
 
 const lyrics =
-  '[ti:Example]\n[offset:100]\n[00:01.00]<00:01.00>New <00:01.50>day#2\n[00:01.00]Old translation\n[00:03.00]Next day\n[00:04.00]\n';
+  '[ti:Example]\n[offset:100]\n[00:01.00]<00:01.00>New <00:01.50>day#2\n[00:01.00]旧译文\n[00:03.00]Next day\n[00:04.00]\n';
 describe('translation drafts', () => {
-  it('retains original word timestamps, cues, metadata, offsets and end markers while changing a selected translation', () => {
+  it('retains original word timestamps, cues, metadata and offsets while cleaning empty draft rows', () => {
     const lines = translationLines(lyrics);
-    const merged = mergeTranslations(lyrics, { [lines[0].id]: 'New translation' });
+    const merged = mergeTranslations(lyrics, { [lines[0].id]: '新译文' });
     expect(merged).toContain('[00:01.00]<00:01.00>New <00:01.50>day#2');
-    expect(merged).toContain('[00:01.00]New translation');
-    expect(merged).not.toContain('Old translation');
+    expect(merged).toContain('[00:01.00]新译文');
+    // Denza.3: use an identified translation; ambiguous Latin rows remain intact.
+    expect(merged).not.toContain('旧译文');
     expect(merged).toContain('[offset:100]');
     // Denza.3: matching drafts remove timestamp-only/whitespace rows on explicit apply.
     expect(merged).toContain('[00:03.00]Next day');
     expect(merged).not.toContain('[00:04.00]');
     expect(translationLines(merged)[0].t).toBeCloseTo(0.9);
-    expect(translationLines(merged)[0].translation).toBe('New translation');
+    expect(translationLines(merged)[0].translation).toBe('新译文');
   });
   it('keeps all meaningful LRC rows when no values were edited', () =>
     expect(mergeTranslations(lyrics, {})).toBe(lyrics.replace('[00:04.00]\n', '').trimEnd()));

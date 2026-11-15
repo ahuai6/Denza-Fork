@@ -143,3 +143,11 @@ describe('online QQ lyric encoding', () => {
     expect(decodeOnlineLyric('00'.repeat(300000))).toBe('');
   });
 });
+
+describe('ambiguous English pronunciation', () => {
+  it('never drops an untyped Latin-only pronunciation under an English original', () => {
+    const source = '[00:01]First line\n[00:01]ferst lain';
+    expect(translationLines(source)[0].translation).toBe('');
+    expect(mergeTranslations(source, { 'line.100': '新译文' })).toContain('[00:01]ferst lain');
+  });
+});

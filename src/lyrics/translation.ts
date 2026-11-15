@@ -35,7 +35,6 @@ export function translationLines(source: string): TranslationLine[] {
 /** LRC carries no explicit track roles. Preserve ambiguous auxiliary rows rather than treating all of them as translations. */
 function editableSubtitle(line: ReturnType<typeof parseLyrics>['lines'][number], native = false): string {
   if (native) return line.subs[0] || '';
-  const nonLatin = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(line.text);
   const reading = (sub: string) =>
     line.reads?.includes(sub) ||
     sameAsLine(sub, line.text) ||
@@ -50,7 +49,7 @@ function editableSubtitle(line: ReturnType<typeof parseLyrics>['lines'][number],
     ),
   );
   if (localized) return localized;
-  if (!nonLatin || line.subs.some(reading)) return candidates[0] || '';
+  if (line.subs.some(reading)) return candidates[0] || '';
   return '';
 }
 /** Remove blank rows only in the matching draft, leaving metadata and meaningful cue-only rows untouched. */

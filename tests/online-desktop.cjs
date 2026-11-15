@@ -237,6 +237,16 @@ if (require.main === module)
       await page.locator('[data-section="playlists"]').click();
       assert.equal(await page.locator('[data-turn="out"]').count(), 0);
       await page.getByRole('button', { name: '同步歌单', exact: true }).click();
+      const artwork = page.locator('[data-platform] svg');
+      assert.equal(await artwork.count(), 4);
+      assert.equal(new Set(await artwork.evaluateAll((nodes) => nodes.map((node) => node.innerHTML))).size, 4);
+      assert.deepEqual(
+        await page
+          .locator('[data-platform="apple"]')
+          .evaluate((node) => ({ color: getComputedStyle(node).color, bg: getComputedStyle(node).backgroundColor })),
+        { color: 'rgb(255, 255, 255)', bg: 'rgb(18, 18, 18)' },
+      );
+      await page.screenshot({ path: path.join(shots, 'platform-icons.png') });
       await page
         .locator('[data-test="synced-playlists"]')
         .getByRole('button', { name: /网易云音乐/ })
