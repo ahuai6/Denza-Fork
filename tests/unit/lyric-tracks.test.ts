@@ -17,6 +17,33 @@ describe('complete native lyric tracks', () => {
     expect(result.lrc).toContain('[00:01]sin the tik');
     expect(result.lrc).toContain('[00:02]第二行译文');
   });
+  it('interleaves repeated timestamps, fractional spellings and existing auxiliary blocks without changing word times', () => {
+    const result = downloadLyricFormats(
+      '[ti:Fixture]\n[offset:100]\n[00:01.000][00:03]<00:01.000>First<00:02.000>\n[00:02]Second\n[00:01.000]译一',
+      '[00:01]译一\n[00:02]译二\n[00:03]译三',
+      '[00:01.00]reading one\n[00:02]reading two',
+    );
+    expect(result.lrc.split('\n')).toEqual([
+      '[ti:Fixture]',
+      '[offset:100]',
+      '[00:01.000]<00:01.000>First<00:02.000>',
+      '[00:01.000]译一',
+      '[00:01.00]reading one',
+      '[00:02]Second',
+      '[00:02]译二',
+      '[00:02]reading two',
+      '[00:03]<00:01.000>First<00:02.000>',
+      '[00:03]译三',
+    ]);
+  });
+  it('retains untimed lyrics and cleans timestamp-only or whitespace rows with the matching-draft mechanism', () => {
+    expect(downloadLyricFormats('Plain original', '普通译文', 'plain reading').lrc).toBe(
+      'Plain original\n普通译文\nplain reading',
+    );
+    expect(downloadLyricFormats('[00:01]Original\n[00:02]\n[00:03]   \n  ', '[00:01]译文\n[00:01]reading').lrc).toBe(
+      '[00:01]Original\n[00:01]译文\n[00:01]reading',
+    );
+  });
   it('preserves native TTML including explicit pronunciation roles', async () => {
     const xml = await readFile(new URL('../fixtures/ttml/line.ttml', import.meta.url), 'utf8');
     const result = downloadLyricFormats(xml);
@@ -62,8 +89,14 @@ describe('complete native lyric tracks', () => {
     for (const id of ['netease', 'qq']) {
       const result = await platform.lyrics({ platform: id, id: 'fixture' });
       expect(result.pronunciation).toBe(pronunciation);
-      expect(result.lrc).toContain(translated);
-      expect(result.lrc).toContain(pronunciation);
+      expect(result.lrc.split('\n')).toEqual([
+        original.split('\n')[0],
+        translated.split('\n')[0],
+        pronunciation.split('\n')[0],
+        original.split('\n')[1],
+        translated.split('\n')[1],
+        pronunciation.split('\n')[1],
+      ]);
       expect(result.ttml).toBe('');
     }
   });

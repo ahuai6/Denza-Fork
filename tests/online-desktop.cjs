@@ -38,6 +38,12 @@ function bridge() {
   };
   let changed = () => {},
     libraryChanged = () => {};
+  window.__previewScrolls = 0;
+  const scroll = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = function (...args) {
+    if (this.matches('[data-test="online-lyrics-preview"]')) window.__previewScrolls++;
+    return scroll.apply(this, args);
+  };
   window.__onlineCalls = [];
   window.__lyricWrites = [];
   window.cadenzaDesktop = {
@@ -73,7 +79,7 @@ function bridge() {
         artist: 'Fixture artist',
         album: 'Fixture album',
         duration: 180,
-        synced: '[00:01]LRCLIB original',
+        synced: '[00:01]LRCLIB original\n[00:02]\n[00:03]  \n    ',
         plain: '',
         instrumental: false,
       },
@@ -105,14 +111,14 @@ function bridge() {
         };
       if (op === 'search')
         return {
-          tracks: [
-            {
-              ...song,
-              ...(args.platform === 'apple'
-                ? { platform: 'apple', id: '123', catalogId: '123', title: 'Apple fixture' }
-                : {}),
-            },
-          ],
+          tracks: Array.from({ length: window.__longSearch ? 30 : 1 }, (_, index) => ({
+            ...song,
+            id: index ? song.id + index : song.id,
+            title: index ? song.title + ' ' + index : song.title,
+            ...(args.platform === 'apple'
+              ? { platform: 'apple', id: '123', catalogId: '123', title: 'Apple fixture' }
+              : {}),
+          })),
           errors: [],
         };
       if (op === 'lyrics')
@@ -120,7 +126,7 @@ function bridge() {
           original: '[00:01]First line\n[00:04]Second line',
           translation: '[00:01]第一句\n[00:04]第二句',
           pronunciation: '[00:01]first lain\n[00:04]se kond lain',
-          lrc: '[00:01]First line\n[00:04]Second line\n[00:01]第一句\n[00:04]第二句\n[00:01]first lain\n[00:04]se kond lain',
+          lrc: '[00:01]First line\n[00:01]第一句\n[00:01]first lain\n[00:04]Second line\n[00:04]第二句\n[00:04]se kond lain',
         };
       if (op === 'sync') {
         if (args.platform === 'apple') {
@@ -336,7 +342,7 @@ if (require.main === module)
       await dialog.getByRole('button', { name: '预览歌词', exact: true }).click();
       assert.equal(
         await dialog.getByRole('textbox', { name: '搜索歌曲', exact: true }).inputValue(),
-        'Current fixture song',
+        'Current fixture song Fixture artist',
       );
       await dialog.getByRole('combobox', { name: '全部平台', exact: true }).click();
       await dialog.getByRole('option', { name: 'QQ Music', exact: true }).click();
@@ -345,6 +351,7 @@ if (require.main === module)
       await dialog.getByText('Fixture song', { exact: true }).waitFor();
       await dialog.getByRole('button', { name: '预览歌词', exact: true }).last().click();
       await dialog.locator('[data-test="online-lyrics-preview"]').waitFor();
+      await page.waitForFunction(() => window.__previewScrolls > 0);
       await page.screenshot({ path: path.join(shots, 'lyric-search.png') });
       await dialog.getByRole('button', { name: '粘贴译文', exact: true }).click();
       await dialog.getByRole('textbox', { name: '粘贴译文', exact: true }).fill('第一句\n第二句');
@@ -413,10 +420,17 @@ if (require.main === module)
       await full.waitFor();
       assert.equal(
         await full.getByRole('textbox', { name: '搜索歌曲', exact: true }).inputValue(),
-        'Current fixture song',
+        'Current fixture song Fixture artist',
       );
+      await page.evaluate(() => {
+        window.__longSearch = true;
+      });
       await full.getByRole('button', { name: '搜索歌曲', exact: true }).click();
-      await full.getByRole('button', { name: '预览歌词', exact: true }).click();
+      await full.getByRole('button', { name: '预览歌词', exact: true }).first().click();
+      await page.waitForFunction(() => {
+        const rect = document.querySelector('[data-test="online-lyrics-preview"]').getBoundingClientRect();
+        return rect.top >= 0 && rect.top < innerHeight - 100;
+      });
       await full.getByText(/first lain/).waitFor();
       await page.screenshot({ path: path.join(shots, 'full-tracks-preview.png') });
       await full.getByRole('button', { name: '使用完整歌词', exact: true }).click();

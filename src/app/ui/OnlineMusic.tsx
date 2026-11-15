@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { tx } from '../../i18n';
 import { Online, type LibView } from '../bridge';
-import { lib, useStore, fmtTime } from '../state';
+import { lib, ui, settings, useStore, fmtTime } from '../state';
 import { playIds } from '../playback/player';
 import { online, request, jobId } from '../online/state';
 import { run } from '../commands';
@@ -22,11 +22,14 @@ import { Button, Dropdown, Note, Cover } from './kit';
 import '../online/words';
 import s from './OnlineMusic.module.css';
 import cards from './CollectionCards.module.css';
+import { useOnlineSurface } from './OnlineSurface';
 import { PlatformArtwork } from './PlatformArtwork';
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const platformName = (platform: string) => MUSIC_PLATFORMS.find(([id]) => id === platform)?.[1] || platform;
 export function OnlineDialog({ title, children, close }: { title: string; children: ReactNode; close(): void }) {
+  const surface = useOnlineSurface();
+  const picture = useStore(ui, (state) => state.layer !== 'none');
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     const prior = document.activeElement;
@@ -65,12 +68,21 @@ export function OnlineDialog({ title, children, close }: { title: string; childr
   }, []);
   return createPortal(
     <div
-      className={s.overlay}
+      className={s.overlay + ' ' + surface.className + (!surface.space && picture ? ' on-picture' : '')}
+      data-online-scene={surface.space ? 'space' : 'classic'}
+      onKeyDown={(e) => e.stopPropagation()}
       onPointerDown={(e) => {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <section className={s.dialog} ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title}>
+      <section
+        className={s.dialog + (surface.space ? ' card' : '')}
+        ref={ref}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <header className={s.header}>
           <h2>{title}</h2>
           <Button onClick={close}>{tx('on.close')}</Button>
@@ -138,14 +150,16 @@ export function SearchSongs({
   onQueued,
   onLyrics,
   initialQuery = '',
+  initialArtist = '',
 }: {
   onReferences?: (fragments: TranslationFragment[]) => void;
   onQueued?(): void;
   onLyrics?(lyrics: OnlineLyrics): void | Promise<void>;
   initialQuery?: string;
+  initialArtist?: string;
 }) {
   const [platform, setPlatform] = useState('all'),
-    [query, setQuery] = useState(initialQuery),
+    [query, setQuery] = useState([initialQuery.trim(), initialArtist.trim()].filter(Boolean).join(' ')),
     [result, setResult] = useState<SearchResult | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
@@ -157,6 +171,15 @@ export function SearchSongs({
   const task = useRef(''),
     mounted = useRef(true),
     scope = useRef(0);
+  const previewElement = useRef<HTMLElement>(null);
+  const reduced = useStore(settings, (state) => state.ui === 'space' && state.spaceReduced);
+  useEffect(() => {
+    if (preview)
+      previewElement.current?.scrollIntoView({
+        behavior: reduced || matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+        block: 'start',
+      });
+  }, [preview, reduced]);
   const folder = useStore(online, (v) => v.folder);
   const lyricOnly = !!onReferences || !!onLyrics;
   useEffect(
@@ -352,9 +375,9 @@ export function SearchSongs({
         </Button>
       )}
       {preview && (
-        <section className={s.preview} data-test="online-lyrics-preview">
+        <section className={s.preview} ref={previewElement} data-test="online-lyrics-preview">
           <h3>{preview.song.title}</h3>
-          <pre>{onLyrics ? preview.lrc || preview.original : preview.translation || preview.original}</pre>
+          <pre>{preview.lrc || preview.original}</pre>
           {onLyrics && (
             <>
               <Note>{tx('on.fullTracksHelp')}</Note>
@@ -399,6 +422,7 @@ export function SearchSongs({
   );
 }
 export function SyncedPlaylists({ playlistId, embedded = false }: { playlistId?: string; embedded?: boolean } = {}) {
+  const surface = useOnlineSurface();
   const playlists = useStore(lib, (v) => v.playlists).filter((p) => p.remote),
     [picked, setPicked] = useState(''),
     [platform, setPlatform] = useState<MusicPlatform | ''>(''),
@@ -447,7 +471,7 @@ export function SyncedPlaylists({ playlistId, embedded = false }: { playlistId?:
     }
   };
   return (
-    <div className={s.stack} data-test="synced-playlists">
+    <div className={s.stack + ' ' + surface.className} data-test="synced-playlists">
       <Note>{tx(remote ? platformInfo(remote.platform).syncHelp : 'on.syncHelp')}</Note>
       <div className={s.toolbar}>
         {platform && !embedded && (
@@ -842,10 +866,11 @@ export function DownloadList() {
   );
 }
 export function OnlineMusic() {
+  const surface = useOnlineSurface();
   const [tab, setTab] = useState('search');
   if (!Online) return <Note>{tx('on.empty')}</Note>;
   return (
-    <div className={s.stack} data-test="online-music">
+    <div className={s.stack + ' ' + surface.className} data-test="online-music">
       <nav className={s.toolbar} aria-label={tx('on.title')}>
         {['search', 'synced', 'downloads', 'accounts'].map((k) => (
           <Button key={k} kind={tab === k ? 'primary' : 'quiet'} aria-pressed={tab === k} onClick={() => setTab(k)}>

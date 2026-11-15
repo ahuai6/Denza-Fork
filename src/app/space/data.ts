@@ -23,6 +23,7 @@ export interface SpaceAlbum {
   ids: string[];
 }
 export interface SpacePlaylist {
+  online?: boolean;
   cover?: string | null;
   id: string;
   name: string;
@@ -90,13 +91,13 @@ export function fromLibrary(
       name: p.name,
       note: labels.songs(p.remote ? p.remote.songs.length : ids.length),
       ids,
-      ...(p.remote ? { cover: p.remote.cover || null } : {}),
+      ...(p.remote ? { online: true, cover: p.remote.cover || null } : {}),
     });
   }
   const sig = [
     songs.map((s) => s.id + s.title + s.cover).join('|'),
     albums.map((a) => a.key + a.cover).join('|'),
-    lists.map((l) => l.id + l.name + l.note + (l.cover || '') + l.ids.join(',')).join('|'),
+    lists.map((l) => l.id + l.name + l.note + !!l.online + (l.cover || '') + l.ids.join(',')).join('|'),
   ].join('#');
   return { songs, albums, playlists: lists, sig };
 }

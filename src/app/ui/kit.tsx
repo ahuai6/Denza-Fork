@@ -18,6 +18,7 @@ import { coverUrl } from '../bridge';
 import { tx } from '../../i18n';
 import { ui, useStore, type MenuItem } from '../state';
 import s from './kit.module.css';
+import surface from './OnlineSurface.module.css';
 export { s as kit };
 
 /** How long a thing takes to leave (--t-out): it stays mounted that long, marked closing. */
@@ -376,6 +377,8 @@ function DropList({
     [pos, setPos] = useState<CSSProperties | null>(null),
     [hi, setHi] = useState(-1);
   const pict = !!anchor.current?.closest('.on-picture');
+  const space = !!anchor.current?.closest('.' + surface.space);
+  const lite = !!anchor.current?.closest('.' + surface.lite);
   useLayoutEffect(() => {
     if (!open || !anchor.current) return;
     const a = anchor.current.getBoundingClientRect(),
@@ -443,7 +446,11 @@ function DropList({
   return createPortal(
     <div
       ref={box}
-      className={s.drop + ' glass' + (pict ? ' on-picture' : '')}
+      className={
+        s.drop +
+        (space ? ' card ' + surface.space + (lite ? ' ' + surface.lite : '') : ' glass') +
+        (pict ? ' on-picture' : '')
+      }
       role="listbox"
       data-closing={closing || undefined}
       style={pos}

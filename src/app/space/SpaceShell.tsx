@@ -21,6 +21,8 @@ import './space.css';
 import s from './SpaceShell.module.css';
 import { OnlineDialog, OnlineMusic } from '../ui/OnlineMusic';
 import { Button } from '../ui/kit';
+import { useOnlineSurface } from '../ui/OnlineSurface';
+import type { PlaylistSource } from './playlistRoom';
 import { tx } from '../../i18n';
 import { request } from '../online/state';
 
@@ -34,6 +36,9 @@ const FACES: [string, string][] = [
 
 export function SpaceShell() {
   const [onlineOpen, setOnlineOpen] = useState(false);
+  const [room, setRoom] = useState('gallery');
+  const [playlistSource, setPlaylistSource] = useState<PlaylistSource>('local');
+  const surface = useOnlineSurface();
   const playlists = useStore(lib, (state) => state.playlists),
     attemptedCovers = useRef(new Set<string>());
   useEffect(() => {
@@ -62,7 +67,7 @@ export function SpaceShell() {
     [extra, setExtra] = useState<HTMLElement | null>(null),
     [detail, setDetail] = useState<Detail>(null),
     [winHost, setWinHost] = useState<HTMLElement | null>(null);
-  const world = useRef<{ dispose(): void; takePointer(): void; closed(): void; pause(on: boolean): void } | null>(null);
+  const world = useRef<ReturnType<typeof createWorld> | null>(null);
   const lang = useStore(langStore, (x) => x.lang),
     lite = useStore(settings, (x) => x.gfx === 'lite'),
     // (dusk or midnight: the scene is built for one of them, and built again when it changes)
@@ -87,7 +92,11 @@ export function SpaceShell() {
       if (gone) return;
       setExtra(document.getElementById('p-extra'));
       setWinHost(document.getElementById('win-btns'));
+      setRoom('gallery');
+      setPlaylistSource('local');
       world.current = createWorld(createBind(), {
+        roomChanged: setRoom,
+        playlistSourceChanged: setPlaylistSource,
         openSettings: (section) => {
           setPanel(null);
           setDetail(null);
@@ -124,7 +133,7 @@ export function SpaceShell() {
   }, [menuOpen]);
   useEffect(() => {
     document.getElementById('mini')?.setAttribute('aria-pressed', String(mini));
-    world.current?.pause(mini || away || onlineOpen);
+    world.current?.pause(mini || away);
     if (onlineOpen) document.exitPointerLock();
   }, [mini, away, gen, lang, ready, onlineOpen]);
   const close = () => {
@@ -147,8 +156,34 @@ export function SpaceShell() {
       )}
       {ready && cfg.open && <SpaceSettings section={cfg.section} onClose={close} />}
       {ready && !mini && (
-        <div className={s.onlineControl} data-test="space-online-control">
-          <Button onClick={() => setOnlineOpen(true)}>{tx('on.short')}</Button>
+        <div className={s.onlineControl + ' ' + surface.className} data-test="space-online-control">
+          <Button className="card" onClick={() => setOnlineOpen(true)}>
+            {tx('on.short')}
+          </Button>
+        </div>
+      )}
+      {ready && !mini && !cfg.open && !onlineOpen && room === 'lists' && (
+        <div
+          className={'hud card ' + s.playlistSwitch}
+          data-test="space-playlist-source"
+          role="group"
+          aria-label={tx('on.playlistSource')}
+        >
+          {(['local', 'online'] as const).map((source) => (
+            <button
+              type="button"
+              key={source}
+              aria-pressed={playlistSource === source}
+              onClick={() => {
+                setDetail(null);
+                world.current?.playlistSource(source);
+              }}
+            >
+              {tx(source === 'local' ? 'on.localShort' : 'on.short')}
+            </button>
+          ))}
+          {!playlists.some((p) => (playlistSource === 'online' ? !!p.remote : !p.remote)) &&
+            playlistSource === 'online' && <small>{tx('on.noOnlineLists')}</small>}
         </div>
       )}
       {onlineOpen && (

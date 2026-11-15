@@ -1,6 +1,23 @@
 import { add } from '../../i18n';
 // Shared by the classic library, space panels and workshop.
 add({
+  'on.localShort': ['本機', '本地', 'Local', 'ローカル', '로컬', 'Local'],
+  'on.playlistSource': [
+    '歌單來源',
+    '歌单来源',
+    'Playlist source',
+    'プレイリストの種類',
+    '재생목록 종류',
+    'Origen de listas',
+  ],
+  'on.noOnlineLists': [
+    '尚無同步歌單',
+    '尚无同步歌单',
+    'No synced playlists yet',
+    '同期済みリストなし',
+    '동기화된 목록 없음',
+    'Sin listas sincronizadas',
+  ],
   'on.short': ['線上', '在线', 'Online', 'オンライン', '온라인', 'En línea'],
   'on.fullTracksHelp': [
     '取得來源提供的原詞、翻譯與讀音',

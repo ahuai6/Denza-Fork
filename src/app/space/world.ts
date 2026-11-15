@@ -18,7 +18,8 @@ import { smooth } from './rigs/rig';
 import { ShotRig } from './rigs/shots';
 import { WalkRig } from './rigs/walk';
 import type { SpaceBind, SpaceNow } from './bind';
-import { navePage, navePages, letterSpan, NAVE_SLOTS, LIST_SLOTS } from './data';
+import { navePage, navePages, letterSpan, NAVE_SLOTS } from './data';
+import { PlaylistRoom, type PlaylistSource } from './playlistRoom';
 import { CoverCache, CoverAtlas } from './covers';
 import { ts } from './i18n';
 import * as PL from './plan';
@@ -26,6 +27,8 @@ import { wallShape, slab, wallPanels, doorTube, bendRound, alongRound, standFlat
 import AMBIENT from './ambient.ogg?url';
 
 export interface SpaceUi {
+  roomChanged(room: string): void;
+  playlistSourceChanged(source: PlaylistSource): void;
   openSettings(section?: string): void;
   closeSettings(): void;
   /** open what was clicked (an album, a playlist, a song) where you stand, or close it */ show(
@@ -41,7 +44,13 @@ export interface SpaceUi {
 export function createWorld(
   bind: SpaceBind,
   ui: SpaceUi,
-): { dispose(): void; takePointer(): void; closed(): void; pause(on: boolean): void } {
+): {
+  dispose(): void;
+  takePointer(): void;
+  closed(): void;
+  pause(on: boolean): void;
+  playlistSource(source: PlaylistSource): void;
+} {
   const ac = new AbortController();
   let alive = true;
   const opt = (o) => ({ ...(typeof o === 'object' ? o : { capture: !!o }), signal: ac.signal });
@@ -66,8 +75,8 @@ export function createWorld(
     SONGS = LIB.songs,
     navePg = 0,
     ALBUMS = navePage(LIB, 0),
-    listPg = 0,
-    PLAYLISTS = LIB.playlists.slice(0, LIST_SLOTS);
+    listRoom = new PlaylistRoom(LIB),
+    PLAYLISTS = listRoom.items;
   let songById = new Map(SONGS.map((s, i) => [s.id, i]));
   const covers = new CoverCache(512, 48),
     thumbs = new CoverCache(256, 96),
@@ -2494,14 +2503,21 @@ export function createWorld(
     });
   }
   const listTone = [toon('#B2C0CF'), toon('#C9D2DA')];
-  const listPages = () => Math.max(1, Math.ceil(LIB.playlists.length / LIST_SLOTS));
-  function setListPage(pg) {
-    const n = listPages();
-    pg = ((pg % n) + n) % n;
-    if (pg === listPg && listMeshes.length) return;
-    listPg = pg;
-    PLAYLISTS = LIB.playlists.slice(pg * LIST_SLOTS, (pg + 1) * LIST_SLOTS);
+  function refreshLists() {
+    PLAYLISTS = listRoom.items;
     buildLists();
+    ui.playlistSourceChanged(listRoom.source);
+  }
+  function setListPage(pg) {
+    const previous = listRoom.page;
+    listRoom.turn(pg);
+    if (listRoom.page !== previous || !listMeshes.length) refreshLists();
+  }
+  function selectPlaylistSource(source: PlaylistSource) {
+    if (listRoom.source === source) return;
+    hideCards();
+    listRoom.select(source);
+    refreshLists();
   }
   buildLists();
 
@@ -3203,6 +3219,7 @@ export function createWorld(
   }
   function onRoom(r) {
     room = r;
+    ui.roomChanged(r);
     setPlace(r, false);
     if (r !== 'settings') ui.closeSettings();
   }
@@ -3536,7 +3553,16 @@ export function createWorld(
     document.activeElement &&
     /INPUT|TEXTAREA/.test(document.activeElement.tagName) &&
     !['checkbox', 'range'].includes(document.activeElement.type);
+  onD('focusin', (e) => {
+    if (e.target instanceof Element && e.target.closest('[role="dialog"]')) {
+      keys.clear();
+      walk.pose.vel.set(0, 0, 0);
+      walk.halt();
+      freePointer();
+    }
+  });
   onW('keydown', (e) => {
+    if (e.target instanceof Element && e.target.closest('[role="dialog"], [role="listbox"]')) return;
     if (e.key === '/' && !typing()) {
       e.preventDefault();
       $('q').focus();
@@ -3582,7 +3608,7 @@ export function createWorld(
     if ((e.code === 'PageUp' || e.code === 'PageDown') && room === 'lists') {
       e.preventDefault();
       hideCards();
-      setListPage(listPg + (e.code === 'PageDown' ? 1 : -1));
+      setListPage(listRoom.page + (e.code === 'PageDown' ? 1 : -1));
       return;
     }
     if ((e.code === 'PageUp' || e.code === 'PageDown') && room === 'atrium') {
@@ -3682,12 +3708,13 @@ export function createWorld(
     const ql = q.toLowerCase(),
       has = (x) => x.t.toLowerCase().includes(ql) || x.s.toLowerCase().includes(ql);
     const hits = [
-      ...LIB.playlists.map((p, j) => ({
+      ...LIB.playlists.map((p) => ({
         t: p.name,
         s: `${ts('kind.list')} · ${p.note}`,
         go: () => {
-          setListPage(Math.floor(j / LIST_SLOTS));
-          focusList(j % LIST_SLOTS);
+          const slot = listRoom.locate(p.id);
+          refreshLists();
+          if (slot >= 0) focusList(slot);
         },
       })),
       ...LIB.albums.map((a, j) => ({
@@ -4459,6 +4486,7 @@ export function createWorld(
     },
     lyr: () => air,
     room: () => room,
+    playlists: () => ({ source: listRoom.source, page: listRoom.page, ids: PLAYLISTS.map((p) => p.id) }),
     regionAt: (x, y, z) => regionAt(new V3(x, y, z)),
     CROSS,
     radio: () => ({ held: radio.held, room: radio.src.room, x: radio.src.pos.x, z: radio.src.pos.z }),
@@ -4634,8 +4662,8 @@ export function createWorld(
     LIB = l;
     SONGS = l.songs;
     songById = new Map(SONGS.map((sg, i) => [sg.id, i]));
-    listPg = Math.min(listPg, Math.max(1, Math.ceil(l.playlists.length / LIST_SLOTS)) - 1);
-    PLAYLISTS = l.playlists.slice(listPg * LIST_SLOTS, (listPg + 1) * LIST_SLOTS);
+    listRoom.update(l);
+    PLAYLISTS = listRoom.items;
     navePg = Math.min(navePg, navePages(l) - 1);
     ALBUMS = navePage(l, navePg);
     hideCards();
@@ -4646,6 +4674,7 @@ export function createWorld(
   });
 
   return {
+    playlistSource: selectPlaylistSource,
     pause: (on) => {
       paused = on;
     },
