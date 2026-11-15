@@ -9,7 +9,6 @@ module.exports = (_host, apple, audio = new LyricsFlowAudio()) => ({
     throw Error('Use the Apple Music sign-in window');
   },
   resolve: (track, quality) => audio.resolve(track, quality),
-  lyrics: () => {
-    throw Error('Apple Music lyrics are available in the official player');
-  },
+  lyrics: (track, signal) => audio.lyrics(track, signal),
+  lookup: (input, signal) => audio.lookup(input, signal),
 });

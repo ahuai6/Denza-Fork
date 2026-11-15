@@ -464,7 +464,7 @@ function DropList({
         </div>
       ))}
     </div>,
-    document.body,
+    anchor.current?.closest('[role="dialog"]') || document.body,
   );
 }
 export function Select({
@@ -605,13 +605,15 @@ export function Swap({
 }
 export const Cover = memo(function Cover({
   k,
+  src,
   full,
   round,
   className,
   eager,
   radius,
 }: {
-  k: string | null | undefined;
+  k?: string | null;
+  src?: string;
   full?: boolean;
   round?: boolean;
   className?: string;
@@ -619,16 +621,17 @@ export const Cover = memo(function Cover({
   radius?: string;
 }) {
   const [bad, setBad] = useState(false);
-  useEffect(() => setBad(false), [k]);
+  useEffect(() => setBad(false), [k, src]);
   return (
     <span
       className={s.cover + (className ? ' ' + className : '')}
       data-round={round || undefined}
       style={radius ? { ['--cover-r' as string]: radius } : undefined}
     >
-      {k && !bad ? (
+      {(k || src) && !bad ? (
         <img
-          src={coverUrl(k, full)}
+          src={src || coverUrl(k!, full)}
+          referrerPolicy={src ? 'no-referrer' : undefined}
           alt=""
           loading={eager ? 'eager' : 'lazy'}
           decoding={eager ? 'sync' : 'async'}
@@ -837,11 +840,13 @@ export function Turn({
   children,
   className,
   boxClassName,
+  overlap = true,
 }: {
   k: string;
   children: ReactNode;
   className?: string;
   boxClassName?: string;
+  overlap?: boolean;
 }) {
   const [cur, setCur] = useState(k),
     [gone, setGone] = useState<{ k: string; node: ReactNode } | null>(null),
@@ -877,7 +882,7 @@ export function Turn({
   const cls = s.turn + (className ? ' ' + className : '');
   return (
     <div ref={box} className={s.turnBox + (boxClassName ? ' ' + boxClassName : '')}>
-      {gone && gone.k !== cur && (
+      {overlap && gone && gone.k !== cur && (
         <div key={gone.k} className={cls} data-turn="out" aria-hidden inert>
           {gone.node}
         </div>

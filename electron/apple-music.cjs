@@ -65,6 +65,10 @@ function appleSong(item, storefront) {
     (item.type === 'songs' ? item.id : a.playParams?.id);
   return {
     platform: 'apple',
+    artworkUrl: String(a.artwork?.url || '')
+      .replace(/\{[wh]\}/g, '500')
+      .replace('{f}', 'jpg')
+      .replace('{c}', 'bb'),
     id: String(item.id || ''),
     catalogId: /^\d+$/.test(String(catalog)) ? String(catalog) : '',
     title: a.name || '',
@@ -334,7 +338,14 @@ class AppleMusic {
       rows:
         kind === 'songs'
           ? r.data.map((row) => appleSong(row, account.storefront))
-          : r.data.map((row) => ({ id: String(row.id || ''), name: row.attributes?.name || '' })),
+          : r.data.map((row) => ({
+              id: String(row.id || ''),
+              name: row.attributes?.name || '',
+              artworkUrl: String(row.attributes?.artwork?.url || '')
+                .replace(/\{[wh]\}/g, '500')
+                .replace('{f}', 'jpg')
+                .replace('{c}', 'bb'),
+            })),
       more: !!r.next,
       total: r.meta?.total ?? null,
     };

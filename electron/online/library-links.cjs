@@ -14,6 +14,11 @@ function createLibraryIntegration({ getDB, trackView, scan, watchAll, changed, v
     const metadataKey = (title, artist) => normalizeSong(title) + '\0' + normalizeSong(artist);
     for (const track of Object.values(db.tracks)) {
       if (track.protected) continue;
+      if (track.onlineCatalogKey) {
+        const group = bySource.get(track.onlineCatalogKey) || [];
+        group.push(track);
+        bySource.set(track.onlineCatalogKey, group);
+      }
       if (track.onlineKey) {
         const group = bySource.get(track.onlineKey) || [];
         group.push(track);
@@ -36,7 +41,9 @@ function createLibraryIntegration({ getDB, trackView, scan, watchAll, changed, v
     for (const playlist of db.playlists) {
       if (!playlist.remote) continue;
       for (const song of playlist.remote.songs) {
-        const exact = bySource.get(`${playlist.remote.platform}:${song.id}`);
+        const exact =
+          bySource.get(`${playlist.remote.platform}:${song.id}`) ||
+          (song.catalogId && bySource.get(`${playlist.remote.platform}:catalog:${song.catalogId}`));
         if (exact?.length) {
           // Multiple downloaded qualities share a trusted identity; retain an existing binding when possible.
           song.localId = exact.find((track) => track.id === song.localId)?.id || exact[0].id;
@@ -67,6 +74,7 @@ function createLibraryIntegration({ getDB, trackView, scan, watchAll, changed, v
     while (!(track = Object.values(db.tracks).find((t) => t.path === file)) && Date.now() < until)
       await new Promise((r) => setTimeout(r, 100));
     if (!track) throw Error('Downloaded audio could not be imported');
+    if (source.catalogId) track.onlineCatalogKey = `${source.platform}:catalog:${source.catalogId}`;
     track.onlineKey = `${source.platform}:${source.id}`;
     linkSyncedPlaylists();
     changed();
@@ -83,7 +91,14 @@ function createLibraryIntegration({ getDB, trackView, scan, watchAll, changed, v
         db.playlists.push(p);
       }
       p.name = list.name;
-      p.remote = { platform, uid, id: list.id, updated: Date.now(), songs: list.songs };
+      p.remote = {
+        platform,
+        uid,
+        id: list.id,
+        artworkUrl: list.artworkUrl || '',
+        updated: Date.now(),
+        songs: list.songs,
+      };
     }
     linkSyncedPlaylists();
     changed();

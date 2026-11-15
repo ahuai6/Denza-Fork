@@ -16,9 +16,10 @@ import {
   type LoginState,
 } from '../online/types';
 import { translationLines, readTranslationPaste, type TranslationFragment } from '../../engine';
-import { Button, Dropdown, Note } from './kit';
+import { Button, Dropdown, Note, Cover } from './kit';
 import '../online/words';
 import s from './OnlineMusic.module.css';
+import cards from './CollectionCards.module.css';
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const platformName = (platform: string) => MUSIC_PLATFORMS.find(([id]) => id === platform)?.[1] || platform;
@@ -29,6 +30,7 @@ export function OnlineDialog({ title, children, close }: { title: string; childr
     ref.current?.focus();
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (ref.current?.querySelector('[role="listbox"]')) return;
         e.stopImmediatePropagation();
         close();
       }
@@ -96,14 +98,53 @@ export function QualityPicker({
     />
   );
 }
-export function SearchSongs({ onReferences }: { onReferences?: (fragments: TranslationFragment[]) => void }) {
+function useQuality(platform: string) {
+  const quality = useStore(online, (v) => v.preferences?.qualities[platform] || 'high');
+  return [
+    quality,
+    (value: string) => {
+      online.set({
+        ...online.get(),
+        preferences: {
+          lyricsMode: 'both',
+          ...online.get().preferences,
+          qualities: { ...online.get().preferences?.qualities, [platform]: value },
+        },
+      });
+      void request('preferences', { platform, quality: value }).catch(() => {});
+    },
+  ] as const;
+}
+function LyricFields() {
+  const mode = useStore(online, (v) => v.preferences?.lyricsMode || 'both');
+  return (
+    <Dropdown
+      className={s.compact}
+      label={tx('on.lyricFields')}
+      value={mode}
+      onChange={(lyricsMode) => {
+        online.set({ ...online.get(), preferences: { qualities: {}, ...online.get().preferences, lyricsMode } });
+        void request('preferences', { lyricsMode }).catch(() => {});
+      }}
+      options={['both', 'lrc', 'ttml', 'none'].map((key) => [key, tx('on.fields.' + key)])}
+    />
+  );
+}
+export function SearchSongs({
+  onReferences,
+  onQueued,
+}: {
+  onReferences?: (fragments: TranslationFragment[]) => void;
+  onQueued?(): void;
+}) {
   const [platform, setPlatform] = useState('all'),
     [query, setQuery] = useState(''),
     [result, setResult] = useState<SearchResult | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
-    [page, setPage] = useState(1),
-    [quality, setQuality] = useState('high');
+    [page, setPage] = useState(1);
+  const [quality, setQuality] = useQuality(platform);
+  const [link, setLink] = useState('');
   const [selected, setSelected] = useState<string[]>([]),
     [preview, setPreview] = useState<{ song: OnlineSong; original: string; translation: string } | null>(null);
   const task = useRef(''),
@@ -150,6 +191,7 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
     act(async () => {
       if (!folder && !(await request<string>('folder'))) return;
       await request('enqueue', { keys, quality });
+      onQueued?.();
     });
   const lyrics = (song: OnlineSong) =>
     act(async () => {
@@ -198,12 +240,51 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
           {(platform === 'all' || platformInfo(platform).download) && (
             <>
               <QualityPicker value={quality} change={setQuality} platform={platform} />
+              <LyricFields />
               <Button disabled={!selected.length} onClick={() => void download(selected)}>
                 {tx('on.selected')} ({selected.length})
               </Button>
             </>
           )}
         </div>
+      )}
+      {!onReferences && (
+        <form
+          className={s.toolbar}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void act(async () => {
+              const id = jobId();
+              task.current = id;
+              setBusy(true);
+              try {
+                const tracks = await request<OnlineSong[]>('lookup', { input: link, jobId: id });
+                if (mounted.current) {
+                  setResult({ tracks, errors: [] });
+                  setSelected([]);
+                  setPlatform('apple');
+                  setPreview(null);
+                }
+              } finally {
+                if (mounted.current) {
+                  setBusy(false);
+                  task.current = '';
+                }
+              }
+            });
+          }}
+        >
+          <input
+            aria-label={tx('on.appleLink')}
+            placeholder={tx('on.appleLink')}
+            value={link}
+            maxLength={2048}
+            onChange={(event) => setLink(event.target.value)}
+          />
+          <Button type="submit" disabled={busy || !link.trim()}>
+            {tx('on.readLink')}
+          </Button>
+        </form>
       )}
       {!onReferences && remoteHelp && <Note>{tx(remoteHelp)}</Note>}
       {error && <Note>{error}</Note>}
@@ -227,6 +308,7 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
                 }
               />
             )}
+            <Cover src={song.artworkUrl} className={s.songCover} />
             <div className={s.info}>
               <b>{song.title}</b>
               <small>
@@ -290,9 +372,10 @@ export function SearchSongs({ onReferences }: { onReferences?: (fragments: Trans
 export function SyncedPlaylists() {
   const playlists = useStore(lib, (v) => v.playlists).filter((p) => p.remote),
     [picked, setPicked] = useState(''),
-    [quality, setQuality] = useState('high'),
+    [platform, setPlatform] = useState<MusicPlatform | ''>(''),
     [error, setError] = useState('');
-  const selected = playlists.find((p) => p.id === picked) || playlists[0];
+  const selected = playlists.find((p) => p.id === picked);
+  const [quality, setQuality] = useQuality(platform || 'all');
   const remote = selected?.remote;
   const accounts = useStore(online, (v) => v.accounts),
     [busy, setBusy] = useState(false),
@@ -338,26 +421,94 @@ export function SyncedPlaylists() {
     <div className={s.stack} data-test="synced-playlists">
       <Note>{tx(remote ? platformInfo(remote.platform).syncHelp : 'on.syncHelp')}</Note>
       <div className={s.toolbar}>
-        {accounts.map((a) => (
-          <Button key={a.platform} disabled={busy} onClick={() => void sync(a.platform)}>
-            {tx(busy ? 'on.wait' : 'on.sync')} · {a.name}
+        {platform && (
+          <Button
+            onClick={() => {
+              setPicked('');
+              setPlatform('');
+            }}
+          >
+            {tx('on.platforms')}
           </Button>
-        ))}
+        )}
+        {selected && <Button onClick={() => setPicked('')}>{tx('on.synced')}</Button>}
+        {platform &&
+          accounts
+            .filter((a) => a.platform === platform)
+            .map((a) => (
+              <Button key={a.platform} disabled={busy} onClick={() => void sync(a.platform)}>
+                {tx(busy ? 'on.wait' : 'on.sync')} · {a.name}
+              </Button>
+            ))}
         {busy && <Button onClick={() => void request('cancel', { jobId: task.current })}>{tx('on.cancel')}</Button>}
       </div>
+      {!platform && (
+        <div className={cards.cards}>
+          {MUSIC_PLATFORMS.map(([id, label], index) => (
+            <div className={cards.cardWrap} key={id}>
+              <button
+                className={cards.card}
+                onClick={() => {
+                  setPlatform(id);
+                  setPicked('');
+                }}
+              >
+                <span className={s.platformArt} data-platform={id} aria-hidden="true">
+                  <svg viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r={22 + index * 3} fill="none" stroke="currentColor" strokeWidth="3" />
+                    <path
+                      d="M25 62 42 30 57 70 76 38"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+                <b>{label}</b>
+                <small>{accounts.find((a) => a.platform === id)?.name || tx('on.signin')}</small>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {platform && !selected && (
+        <div className={cards.cards}>
+          {playlists
+            .filter(
+              (p) =>
+                p.remote?.platform === platform &&
+                (!accounts.find((a) => a.platform === platform) ||
+                  p.remote.uid === accounts.find((a) => a.platform === platform)?.uid),
+            )
+            .map((p) => (
+              <div className={cards.cardWrap} key={p.id}>
+                <button className={cards.card} onClick={() => setPicked(p.id)}>
+                  <Cover src={p.remote?.artworkUrl} />
+                  <b>{p.name}</b>
+                  <small>
+                    {p.remote?.songs.length} · {platformName(platform)}
+                  </small>
+                </button>
+              </div>
+            ))}
+        </div>
+      )}
       {error && <Note>{error}</Note>}
       {!playlists.length && <Note>{tx('on.empty')}</Note>}
       {selected && remote && (
         <>
-          <Dropdown
-            label={tx('on.synced')}
-            value={selected.id}
-            onChange={setPicked}
-            options={playlists.map((p) => [p.id, `${p.name} · ${platformName(p.remote!.platform)}`])}
-          />
+          <div className={s.playlistHead}>
+            <Cover src={remote.artworkUrl} />
+            <h2>{selected.name}</h2>
+          </div>
           <div className={s.toolbar}>
             {platformInfo(remote.platform).download && (
-              <QualityPicker value={quality} change={setQuality} platform={remote.platform} />
+              <>
+                <QualityPicker value={quality} change={setQuality} platform={remote.platform} />
+                <LyricFields />
+              </>
             )}
             <Button disabled={!selected.tracks.length} onClick={() => void playIds(selected.tracks, 0)}>
               {tx('on.playLocal')}
@@ -389,10 +540,11 @@ export function SyncedPlaylists() {
             {remote.songs.map((song, i) => (
               <div className={s.row} key={`${song.id}:${i}`}>
                 <span>{i + 1}</span>
+                <Cover src={song.artworkUrl} className={s.songCover} />
                 <div className={s.info}>
                   <b>{song.title}</b>
                   <small>
-                    {song.artist} ·{' '}
+                    {song.artist} · {song.album} · {fmtTime(song.duration)} ·{' '}
                     {tx(
                       song.localId
                         ? 'on.localSong'
@@ -572,7 +724,7 @@ function Accounts() {
     </div>
   );
 }
-function DownloadList() {
+export function DownloadList() {
   const state = useStore(online),
     [error, setError] = useState('');
   const act = async (operation: string, args?: object) => {
@@ -587,14 +739,44 @@ function DownloadList() {
     <div className={s.stack} data-test="online-downloads">
       <Button onClick={() => void act('folder')}>{tx('on.folder')}</Button>
       <small>{state.folder}</small>
+      <LyricFields />
+      {!state.jobs.length && <Note>{tx('on.empty')}</Note>}
       {error && <Note>{error}</Note>}
       {state.jobs.map((j) => (
         <div className={s.row} key={j.id}>
+          <Cover src={j.track.artworkUrl} className={s.songCover} />
           <div className={s.info}>
             <b>{j.track.title}</b>
             <small>
               {tx('on.status.' + j.status)} · {j.total ? Math.round((j.received / j.total) * 100) + '%' : ''}
             </small>
+            <progress
+              aria-label={j.track.title}
+              max={j.total || undefined}
+              value={j.total ? Math.min(j.received, j.total) : j.status === 'completed' ? 1 : undefined}
+            />
+            <small>
+              {(j.received / 1048576).toFixed(1)} / {j.total ? (j.total / 1048576).toFixed(1) : '…'} MB ·{' '}
+              {tx(platformInfo(j.track.platform).qualityLabels?.[j.quality as 'high'] || 'on.' + j.quality)}
+              {j.resolvedQuality && j.resolvedQuality !== j.quality
+                ? ' → ' +
+                  tx(
+                    platformInfo(j.track.platform).qualityLabels?.[j.resolvedQuality as 'high'] ||
+                      'on.' + j.resolvedQuality,
+                  )
+                : ''}{' '}
+              · {j.source}
+            </small>
+            {j.fallbackReason && <small>{tx('on.qualityFallback')}</small>}
+            {j.lyrics && (
+              <small>
+                {tx('on.lyricFields')}:{' '}
+                {j.lyrics.fields.join(' + ').toUpperCase() ||
+                  tx('on.fields.' + (j.lyrics.status === 'disabled' ? 'none' : 'unavailable'))}
+                {j.lyrics.converted && j.lyrics.fields.includes('ttml') ? ' · ' + tx('on.convertedTtml') : ''}
+              </small>
+            )}
+            {j.metadataWarning && <small role="status">{j.metadataWarning}</small>}
             {j.info && (
               <small>
                 {j.info.codec} · {j.info.bits} bit · {j.info.sampleRate / 1000} kHz ·{' '}
@@ -640,7 +822,7 @@ export function OnlineMusic() {
           </Button>
         ))}
       </nav>
-      {tab === 'search' && <SearchSongs />}
+      {tab === 'search' && <SearchSongs onQueued={() => setTab('downloads')} />}
       {tab === 'synced' && <SyncedPlaylists />}
       {tab === 'downloads' && <DownloadList />}
       {tab === 'accounts' && <Accounts />}

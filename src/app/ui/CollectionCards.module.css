@@ -1,0 +1,44 @@
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: 34px 26px;
+}
+.cardWrap {
+  position: relative;
+  min-width: 0;
+  container-type: inline-size;
+}
+.card {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  padding: 0;
+  min-width: 0;
+  width: 100%;
+}
+.card > span:first-child {
+  width: 100%;
+  height: auto;
+  box-shadow: var(--shadow-1);
+  transition:
+    transform var(--t-med) var(--ease),
+    box-shadow var(--t-med) var(--ease);
+  margin-bottom: 10px;
+}
+.cardWrap:hover .card > span:first-child {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
+}
+.card b {
+  font-weight: 580;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card small {
+  color: var(--fg-3);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

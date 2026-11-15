@@ -28,7 +28,7 @@ flowchart TD
 | 模块 | 职责 | 不应依赖 |
 | --- | --- | --- |
 | `shared/online-providers.json` | 平台 ID、名称、登录方式、下载/歌词/远端播放能力与文案键，随桌面包发布 | SDK、密钥、Electron、UI 代码 |
-| `electron/platforms.cjs` | 对应用提供 `search/login/account/logout/page/resolve/lyrics/open`，管理统一会话与分派 | 原始 SDK 字段及平台方法名、音乐库和界面 |
+| `electron/platforms.cjs` | 对应用提供 `search/login/account/logout/page/resolve/lyrics/lookup/open`，管理统一会话与分派 | 原始 SDK 字段及平台方法名、音乐库和界面 |
 | `electron/online/providers/{netease,qq,kugou,apple}.cjs` | 单平台协议参数、结果映射、登录与分页行为 | Cadenza 音乐库、下载任务、翻译 UI、其他平台 |
 | `electron/online/providers/helpers.cjs` | 统一歌曲/分页结果及下载直链校验 | 应用状态和播放器 |
 | `electron/online/sdk-transport.cjs` | Worker 生命周期、取消/超时、常见协议错误解包 | UI、音乐库 |
@@ -80,3 +80,12 @@ npm run online:deps:check    # 另外向 npm 查询最新版本，不修改依�
 本次模块调整不改变 `online.json`、同步歌单 `remote` 数据及下载任务格式，不重新命名歌曲或平台身份。以后改变持久化结构时，应增加显式版本和迁移，使用现有数据副本验证；不能靠重建用户资料库掩盖兼容问题。
 
 AM 账号模块与文件服务适配互不调用：第三方服务只取得目录 ID、格式、模式及可选地区。`Downloads` 只消费通用下载描述与独立校验器；它没有 LyricsFlow URL、Apple 登录或服务端处理逻辑。设置页的共享用途提醒不是授权机制，不能据此推断第三方服务合法性。
+
+## 第二版接入边界
+
+- `electron/online/public-resolvers.cjs` 是匿名备用取链适配器，协议来源独立登记；由组装层注入 Platforms，不向 SDK 或前端扩散接口格式。解析成功后若文件失效，队列先在同档位请求备用来源，再降档。用户的偏好和实际档位分开保存。
+- `electron/online/lyricsflow-audio.cjs` 统一 AM 链接目录展开、下载请求和歌词查询；账号令牌仍仅归 Apple 官方适配器管理。目录分页限定服务同源与当前地区，拒绝不完整的链接集合。
+- `src/lyrics/download.ts` 仅包含纯格式转换，复用 Cadenza 的解析器。`scripts/online-lyrics.mjs` 将其构建为 `electron/generated/lyrics.cjs`；测试与应用构建自动生成，打包必须包含并检查该模块。不依赖参考应用的歌词实现。
+- `electron/online/tags.cjs` 负责下载文件的容器字段，队列负责暂存、回读与事务。原编辑器/歌词保存路径不依赖这个模块。
+- `CollectionCards.module.css` 与 `Cover` 共用 Cadenza 原卡片和封面表现；经典歌单和在线扩展使用同一组样式，空间通过已有共享在线面板访问，不复制业务。
+- `online.json.preferences` 是可兼容的新增字段：各平台音质与全局歌词模式。任务保存入队时的歌词模式、请求档位、实际档位、来源与写入字段。旧数据加载补默认值，现有文件和歌单不迁移覆盖。

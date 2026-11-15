@@ -1,3 +1,4 @@
+const { writeDownloadTags, verifyLyrics, nativeTtml } = require('./online/tags.cjs');
 const { fetchAudio } = require('./online/http-files.cjs');
 const { validateFormat } = require('./online/audio-validation.cjs');
 const fs = require('node:fs');
@@ -41,8 +42,8 @@ async function commit(temp, folder, name, ext, intent = async () => {}) {
   throw Error('Cannot reserve a file name');
 }
 class Downloads {
-  constructor(store, platforms, library, publish, fetcher = fetchAudio) {
-    Object.assign(this, { store, platforms, library, publish, fetcher });
+  constructor(store, platforms, library, publish, fetcher = fetchAudio, artworkFetcher = fetch) {
+    Object.assign(this, { store, platforms, library, publish, fetcher, artworkFetcher });
     this.running = new Map();
     this.tasks = new Set();
     this.closed = false;
@@ -50,17 +51,9 @@ class Downloads {
       if (['queued', 'resolving', 'downloading', 'saving'].includes(j.status)) j.status = 'paused';
   }
   view() {
-    return this.store.data.jobs.map(({ id, track, quality, status, received, total, info, error }) => ({
-      id,
-      track,
-      quality,
-      status,
-      received,
-      total,
-      info,
-      error,
-    }));
+    return this.store.data.jobs.map(({ file, pending, folder, ...view }) => view);
   }
+
   async add(tracks, quality) {
     if (!this.store.data.folder) throw Error('Choose a download folder first');
     if (!['standard', 'high', 'lossless', 'hires'].includes(quality) || !tracks.length || tracks.length > 100)
@@ -80,6 +73,7 @@ class Downloads {
         id: randomUUID(),
         track,
         quality,
+        lyricsMode: this.store.data.preferences?.lyricsMode || 'both',
         folder: this.store.data.folder,
         status: 'queued',
         received: 0,
@@ -146,63 +140,110 @@ class Downloads {
         return;
       }
       job.status = 'resolving';
+      delete job.fallbackReason;
+      delete job.metadataWarning;
+      delete job.lyrics;
       this.publish();
-      const {
-        url,
-        transport,
-        expectedFormat,
-        headerTimeoutMs = 25000,
-      } = await this.platforms.resolve(job.track, job.quality, controller.signal);
-      const headerTimer = setTimeout(() => controller.abort(), Math.min(180000, Math.max(1000, headerTimeoutMs)));
-      let r;
-      try {
-        r = await this.fetcher(url, { signal: controller.signal, transport });
-      } finally {
-        clearTimeout(headerTimer);
-      }
-      if (!r.ok || !r.body) throw Error('Audio server HTTP ' + r.status);
-      const limit = 2 * 1024 ** 3;
-      job.total = Number(r.headers.get('content-length')) || 0;
-      if (job.total > limit) {
-        await r.body.cancel();
-        throw Error('File exceeds 2 GB');
-      }
-      await fs.promises.mkdir(job.folder, { recursive: true });
-      temp = path.join(job.folder, `.denza-${job.id}.part`);
-      let head = Buffer.alloc(0),
-        last = 0;
-      job.status = 'downloading';
-      job.received = 0;
-      this.publish();
-      const touch = () => {
-        clearTimeout(idle);
-        idle = setTimeout(() => controller.abort(), 45000);
-      };
-      touch();
-      const meter = new Transform({
-        transform: (chunk, _encoding, next) => {
-          touch();
-          job.received += chunk.length;
-          if (job.received > limit) return next(Error('File exceeds 2 GB'));
-          if (head.length < 512) head = Buffer.concat([head, chunk]).subarray(0, 512);
-          if (Date.now() - last > 350) {
-            last = Date.now();
-            this.publish();
+      let ext, meta, mm;
+      const tiers = ['hires', 'lossless', 'high', 'standard'];
+      const attempts = tiers.slice(tiers.indexOf(job.quality)).map((quality) => ({ quality, alternate: false }));
+      for (const attempt of attempts) {
+        const { quality, alternate } = attempt;
+        let canFallback = false;
+        try {
+          job.resolvedQuality = quality;
+          const {
+            url,
+            headers,
+            source,
+            transport,
+            expectedFormat,
+            qualityByFormat,
+            canFallback: retrySource,
+            headerTimeoutMs = 25000,
+          } = await this.platforms.resolve(job.track, quality, controller.signal, alternate);
+          canFallback = retrySource;
+          job.source = source || job.track.platform;
+          const headerTimer = setTimeout(() => controller.abort(), Math.min(180000, Math.max(1000, headerTimeoutMs)));
+          let r;
+          try {
+            r = await this.fetcher(url, { signal: controller.signal, transport, headers });
+          } finally {
+            clearTimeout(headerTimer);
           }
-          next(null, chunk);
-        },
-      });
-      await pipeline(Readable.fromWeb(r.body), meter, fs.createWriteStream(temp, { flags: 'wx' }), {
-        signal: controller.signal,
-      });
-      clearTimeout(idle);
-      if (job.total && job.received !== job.total) throw Error('Incomplete audio transfer');
-      const ext = audioExtension(head);
-      const mm = await import('music-metadata');
-      const meta = await mm.parseFile(temp, { duration: true, skipCovers: true });
-      validateFormat(expectedFormat, ext, meta, job.track.duration);
-      if (!meta.format.duration || (job.track.duration > 60 && meta.format.duration + 15 < job.track.duration))
-        throw Error('Audio is incomplete or a preview');
+          if (!r.ok || !r.body) throw Error('Audio server HTTP ' + r.status);
+          const limit = 2 * 1024 ** 3;
+          job.total = Number(r.headers.get('content-length')) || 0;
+          if (job.total > limit) {
+            await r.body.cancel();
+            throw Error('File exceeds 2 GB');
+          }
+          await fs.promises.mkdir(job.folder, { recursive: true });
+          temp = path.join(job.folder, `.denza-${job.id}.part`);
+          let head = Buffer.alloc(0),
+            last = 0;
+          job.status = 'downloading';
+          job.received = 0;
+          this.publish();
+          const touch = () => {
+            clearTimeout(idle);
+            idle = setTimeout(() => controller.abort(), 45000);
+          };
+          touch();
+          const meter = new Transform({
+            transform: (chunk, _encoding, next) => {
+              touch();
+              job.received += chunk.length;
+              if (job.received > limit) return next(Error('File exceeds 2 GB'));
+              if (head.length < 512) head = Buffer.concat([head, chunk]).subarray(0, 512);
+              if (Date.now() - last > 350) {
+                last = Date.now();
+                this.publish();
+              }
+              next(null, chunk);
+            },
+          });
+          await pipeline(Readable.fromWeb(r.body), meter, fs.createWriteStream(temp, { flags: 'wx' }), {
+            signal: controller.signal,
+          });
+          clearTimeout(idle);
+          if (job.total && job.received !== job.total) throw Error('Incomplete audio transfer');
+          ext = audioExtension(head);
+          mm = await import('music-metadata');
+          meta = await mm.parseFile(temp, { duration: true, skipCovers: true });
+          validateFormat(expectedFormat, ext, meta, job.track.duration);
+          if (!meta.format.duration || (job.track.duration > 60 && meta.format.duration + 15 < job.track.duration))
+            throw Error('Audio is incomplete or a preview');
+          const lossless = /FLAC|ALAC|PCM|WAVE/i.test(meta.format.codec || ext);
+          const actual = lossless
+            ? (meta.format.sampleRate || 0) > 48000 || (meta.format.bitsPerSample || 0) > 16
+              ? 'hires'
+              : 'lossless'
+            : (meta.format.bitrate || 0) >= 240000
+              ? 'high'
+              : 'standard';
+          // AM tiers name formats (MP3/AAC/FLAC/ALAC), validated above, rather than sample rates.
+          if (!qualityByFormat && tiers.indexOf(actual) > tiers.indexOf(quality)) {
+            throw Error('The returned audio has a lower measured quality');
+          }
+          break;
+        } catch (error) {
+          clearTimeout(idle);
+          if (temp) await fs.promises.rm(temp, { force: true }).catch(() => {});
+          temp = null;
+          if (controller.signal.aborted) throw error;
+          if (canFallback && !alternate) {
+            attempts.splice(attempts.indexOf(attempt) + 1, 0, { quality, alternate: true });
+          } else {
+            if (quality === 'standard') throw error;
+            job.fallbackReason = 'The selected quality is unavailable; trying the next tier';
+          }
+          job.received = 0;
+          job.total = 0;
+          job.status = 'resolving';
+          this.publish();
+        }
+      }
       job.info = {
         codec: meta.format.codec || ext,
         sampleRate: meta.format.sampleRate || 0,
@@ -217,34 +258,57 @@ class Downloads {
       temp = tagged;
       let staged;
       try {
-        let lyrics = '';
-        try {
-          const found = await this.platforms.lyrics(job.track, AbortSignal.timeout(12000));
-          lyrics = [found.original, found.translation].filter(Boolean).join('\n');
-        } catch {
-          /* Optional lyrics must never discard a complete audio file. */
+        let found, artwork;
+        const mode = job.lyricsMode || 'both';
+        if (mode !== 'none') {
+          try {
+            found = await this.platforms.lyrics(
+              job.track,
+              AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
+            );
+          } catch {
+            job.metadataWarning = 'Lyrics could not be fetched; audio has been retained';
+          }
+        }
+        if (mode !== 'none' && !found) {
+          const embedded = nativeTtml(meta.native) || meta.common.lyrics?.[0]?.text;
+          if (embedded) {
+            found = { original: embedded, source: 'embedded' };
+            delete job.metadataWarning;
+          }
+        }
+        if (job.track.artworkUrl) {
+          try {
+            const response = await this.artworkFetcher(job.track.artworkUrl, {
+              signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]),
+              credentials: 'omit',
+            });
+            if (!response.ok || !response.body) throw Error('Artwork unavailable');
+            const chunks = [];
+            let size = 0;
+            for await (const chunk of Readable.fromWeb(response.body)) {
+              size += chunk.length;
+              if (size > 8 * 1024 * 1024) throw Error('Artwork too large');
+              chunks.push(chunk);
+            }
+            artwork = Buffer.concat(chunks);
+          } catch {
+            /* Cover errors must not discard audio or lyric tags. */
+          }
         }
         staged = path.join(job.folder, `.denza-${job.id}.tags.${ext}`);
         await fs.promises.copyFile(temp, staged, fs.constants.COPYFILE_EXCL);
-        const taglib = require('node-taglib-sharp');
-        const file = taglib.File.createFromPath(staged);
-        try {
-          file.tag.title = job.track.title;
-          file.tag.performers = [job.track.artist];
-          file.tag.album = job.track.album;
-          if (lyrics) file.tag.lyrics = lyrics;
-          file.save();
-        } finally {
-          file.dispose();
-        }
+        job.lyrics = writeDownloadTags(staged, ext, job.track, found, mode, artwork);
         const checked = await mm.parseFile(staged, { duration: true, skipCovers: true });
+        verifyLyrics(checked, job.lyrics);
         if (!checked.format.duration || Math.abs(checked.format.duration - meta.format.duration) > 0.05)
           throw Error('Tag validation failed');
         await fs.promises.unlink(temp);
         temp = staged;
         staged = null;
       } catch {
-        job.error = 'Audio saved; some tags could not be written';
+        job.lyrics = { mode: job.lyricsMode || 'both', fields: [], status: 'unavailable' };
+        job.metadataWarning = 'Audio saved; metadata validation or writing failed';
       } finally {
         if (staged) await fs.promises.rm(staged, { force: true }).catch(() => {});
       }

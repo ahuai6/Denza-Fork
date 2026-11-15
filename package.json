@@ -1,7 +1,7 @@
 {
   "name": "cadenza",
   "productName": "Cadenza",
-  "version": "3.2.9-denza.1",
+  "version": "3.2.9-denza.2",
   "description": "Cadenza: a personal music library whose songs play with lyrics that move to the music, exportable as lyric videos",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"electron/**/*.cjs\" \"tests/**/*.{ts,cjs}\" \"scripts/*.mjs\" \"*.ts\"",
     "test": "vitest run",
     "build:web": "vite build --mode web",
-    "build:app": "vite build --mode app && node scripts/fonts.mjs dist-app/fonts",
+    "build:app": "npm run build:online && vite build --mode app && node scripts/fonts.mjs dist-app/fonts",
     "fonts:previews": "node scripts/font-previews.mjs",
     "gen:settings": "node scripts/settings.mjs",
     "build:native": "cargo build --release --manifest-path native/cadenza-audio/Cargo.toml --target x86_64-pc-windows-gnu",
@@ -27,7 +27,9 @@
     "dist:win": "npm run build:app && npm run build:native && node scripts/models.mjs && electron-builder --win --x64",
     "fonts:coverage": "node scripts/font-coverage.mjs",
     "online:deps": "node scripts/online-deps.mjs",
-    "online:deps:check": "node scripts/online-deps.mjs --check"
+    "online:deps:check": "node scripts/online-deps.mjs --check",
+    "build:online": "node scripts/online-lyrics.mjs",
+    "pretest": "npm run build:online"
   },
   "build": {
     "appId": "app.cadenza.desktop",

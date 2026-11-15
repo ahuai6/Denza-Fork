@@ -39,7 +39,7 @@ export function LibraryView() {
     pls = useStore(lib, (x) => x.playlists);
   return (
     <div className={s.libWrap}>
-      <Turn k={detail ? detail.kind + ':' + detail.key : 'list'}>
+      <Turn k={detail ? detail.kind + ':' + detail.key : 'list'} overlap={false}>
         {detail ? (
           <Detail detail={detail} idx={idx} search={search} />
         ) : (
@@ -47,7 +47,7 @@ export function LibraryView() {
             <Shelves section={section} />
             {/* (the songs' and the favourites' heads carry their play buttons, on the right: they draw their own) */}
             {/* (a shelf's head turns with it: the title never changes before the shelf does) */}
-            <Turn k={section}>
+            <Turn k={section} overlap={false}>
               {section !== 'songs' && section !== 'favorites' && section !== 'albums' && (
                 <ShelfHead
                   kicker={[tx('s.library'), ...shelfFacts(section, idx, tracks, favorites, pls.length)].join(' · ')}

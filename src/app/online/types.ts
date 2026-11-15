@@ -7,6 +7,7 @@ export interface OnlineSong {
   artist: string;
   album: string;
   duration: number;
+  artworkUrl?: string;
   albumId?: string;
   albumAudioId?: string;
   mediaId?: string;
@@ -18,6 +19,7 @@ export interface RemotePlaylist {
   platform: MusicPlatform;
   uid: string;
   id: string;
+  artworkUrl?: string;
   updated: number;
   songs: OnlineSong[];
 }
@@ -34,12 +36,18 @@ export interface DownloadJob {
   received: number;
   total: number;
   info?: { codec: string; sampleRate: number; bits: number; bitrate: number };
+  resolvedQuality?: string;
+  fallbackReason?: string;
+  source?: string;
+  metadataWarning?: string;
+  lyrics?: { mode: string; fields: string[]; status: string; converted?: boolean };
   error?: string;
 }
 export interface OnlineState {
   accounts: MusicAccount[];
   jobs: DownloadJob[];
   folder: string;
+  preferences?: { qualities: Record<string, string>; lyricsMode: string };
 }
 export interface OnlineApi {
   request(operation: string, args?: object): Promise<unknown>;

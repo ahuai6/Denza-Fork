@@ -47,16 +47,21 @@ module.exports = ({ call }) => ({
     return pageResult(rows, kind, 'qq', b, first(b, ['total', 'total_song_num', 'cdlist.0.total_song_num'], null));
   },
   async resolve(track, quality, signal) {
+    if (quality === 'hires') throw Error('Native QQ Hi-Res is unavailable');
     const b = await call(
       'getMusicPlay',
       {
         songmid: track.id,
-        quality: { standard: '128', high: '320', lossless: 'flac', hires: 'hires' }[quality],
+        quality: { standard: '128', high: '320', lossless: 'flac', hires: 'flac' }[quality],
         mediaId: track.mediaId,
       },
       signal,
     );
-    return downloadResult(b.playUrl?.[track.id] || b.data?.playUrl?.[track.id] || b.data || b);
+    const row = b.playUrl?.[track.id] || b.data?.playUrl?.[track.id] || b.data || b;
+    return {
+      ...downloadResult(typeof row === 'string' ? { url: row } : row),
+      headers: { Referer: 'https://y.qq.com/' },
+    };
   },
   async lyrics(track, signal) {
     const b = await call('getLyric', { songmid: track.id, isFormat: false }, signal);

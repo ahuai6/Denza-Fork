@@ -4,7 +4,8 @@ const { Platforms, PLATFORMS } = require('./platforms.cjs');
 const { Downloads } = require('./downloads.cjs');
 const { Translator, CodexText } = require('./translation-service.cjs');
 const { AppleMusic, appleFetch } = require('./apple-music.cjs');
-const { fetchAudio } = require('./online/http-files.cjs');
+const { LyricsFlowAudio } = require('./online/lyricsflow-audio.cjs');
+const { createPublicResolver } = require('./online/public-resolvers.cjs');
 
 // Fetch the complete snapshot before changing any saved playlist. Repeated/partial pages never erase the old copy.
 async function collectPages(read, signal) {
@@ -43,7 +44,11 @@ async function start(ipcMain, getWin, library) {
     () => publish(),
     (url, options) => appleFetch(net, url, options),
   );
-  const platforms = new Platforms(store, undefined, apple);
+  const fetcher = (url, options) => net.fetch(url, { ...options, credentials: 'omit' });
+  const platforms = new Platforms(store, undefined, apple, {
+    audio: new LyricsFlowAudio(undefined, fetcher),
+    fallback: createPublicResolver(fetcher),
+  });
   const candidates = new Map(),
     tasks = new Map();
   const keyOf = (track) => `${track.platform}:${track.id}`;
@@ -58,11 +63,17 @@ async function start(ipcMain, getWin, library) {
       win.webContents.send('online:changed', {
         accounts: store.accounts(),
         folder: store.data.folder,
+        preferences: store.data.preferences,
         jobs: downloads.view(),
       });
   };
-  const downloads = new Downloads(store, platforms, library, publish, (url, options) =>
-    fetchAudio(url, options, (fileURL, fileOptions) => net.fetch(fileURL, { ...fileOptions, credentials: 'omit' })),
+  const downloads = new Downloads(
+    store,
+    platforms,
+    library,
+    publish,
+    (url, options) => fetcher(url, { signal: options.signal, headers: options.headers }),
+    fetcher,
   );
   const codex = new CodexText(app.getPath('userData'), (url) => shell.openExternal(url));
   const translator = new Translator(store, codex);
@@ -86,7 +97,24 @@ async function start(ipcMain, getWin, library) {
   const openRemote = ({ key, playlistId }) =>
     key ? platforms.open(track(key)) : platforms.open(null, library.remotePlaylist(playlistId));
   const operations = {
-    state: () => ({ accounts: store.accounts(), folder: store.data.folder, jobs: downloads.view() }),
+    state: () => ({
+      accounts: store.accounts(),
+      folder: store.data.folder,
+      jobs: downloads.view(),
+      preferences: store.data.preferences,
+    }),
+    preferences: async ({ platform, quality, lyricsMode }) => {
+      if (platform && ![...PLATFORMS, 'all'].includes(platform)) throw Error('Unknown platform preference');
+      if (quality && !['standard', 'high', 'lossless', 'hires'].includes(quality)) throw Error('Unknown quality');
+      if (lyricsMode && !['none', 'lrc', 'ttml', 'both'].includes(lyricsMode)) throw Error('Unknown lyric field mode');
+      if (platform && quality) store.data.preferences.qualities[platform] = quality;
+      if (lyricsMode) store.data.preferences.lyricsMode = lyricsMode;
+      await store.save();
+      publish();
+      return store.data.preferences;
+    },
+    lookup: ({ input, jobId }) =>
+      job(jobId, async (signal) => remember(await platforms.lookup('apple', input, signal))),
     folder: async () => {
       const r = await dialog.showOpenDialog(getWin(), { properties: ['openDirectory', 'createDirectory'] });
       if (!r.canceled && r.filePaths[0]) {
