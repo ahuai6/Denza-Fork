@@ -16,13 +16,13 @@ import { menuFor } from '../commands';
 import { targetOf } from './targets';
 import { MiniLyrics } from '../ui/MiniLyrics';
 import { lang as langStore } from '../../i18n';
-import { useStore, settings, ui, openMenu } from '../state';
+import { useStore, settings, ui, openMenu, lib } from '../state';
 import './space.css';
 import s from './SpaceShell.module.css';
 import { OnlineDialog, OnlineMusic } from '../ui/OnlineMusic';
 import { Button } from '../ui/kit';
 import { tx } from '../../i18n';
-import onlineStyle from '../ui/OnlineMusic.module.css';
+import { request } from '../online/state';
 
 // every face the scene's textures and the HUD draw with, loaded before the first texture is drawn
 const FACES: [string, string][] = [
@@ -34,6 +34,26 @@ const FACES: [string, string][] = [
 
 export function SpaceShell() {
   const [onlineOpen, setOnlineOpen] = useState(false);
+  const playlists = useStore(lib, (state) => state.playlists),
+    attemptedCovers = useRef(new Set<string>());
+  useEffect(() => {
+    let active = true;
+    const pending = playlists.filter((p) => p.remote?.artworkUrl && !p.remote.cover);
+    const worker = async () => {
+      while (active && pending.length) {
+        const p = pending.shift()!;
+        const key = p.id + '|' + p.remote!.artworkUrl;
+        if (attemptedCovers.current.has(key)) continue;
+        attemptedCovers.current.add(key);
+        await request('playlistCover', { id: p.id }).catch(() => {});
+      }
+    };
+    void worker();
+    void worker();
+    return () => {
+      active = false;
+    };
+  }, [playlists]);
   const root = useRef<HTMLDivElement>(null),
     [ready, setReady] = useState(false),
     [cfg, setCfg] = useState<{ open: boolean; section?: string }>({ open: false }),
@@ -127,8 +147,8 @@ export function SpaceShell() {
       )}
       {ready && cfg.open && <SpaceSettings section={cfg.section} onClose={close} />}
       {ready && !mini && (
-        <div className={onlineStyle.float}>
-          <Button onClick={() => setOnlineOpen(true)}>{tx('on.title')}</Button>
+        <div className={s.onlineControl} data-test="space-online-control">
+          <Button onClick={() => setOnlineOpen(true)}>{tx('on.short')}</Button>
         </div>
       )}
       {onlineOpen && (

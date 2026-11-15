@@ -63,6 +63,17 @@
       "kind": "protocol",
       "source": "https://apivc-meting.sakurink.eu.org/registration/",
       "adapter": "electron/online/public-resolvers.cjs"
+    },
+    {
+      "id": "lrc-get-online-lyric-helper",
+      "kind": "source",
+      "source": "https://github.com/valenbine/LRC-GET",
+      "commit": "2cc0e67dcfc567a122ebb953ef696783a6760d17",
+      "upstreamFile": "src/des-helper.js",
+      "upstreamSHA256": "a70d936a4cc0709c2c6febe4e71e6c75d8d3bdefd66a962737bcdf7951f0dd3c",
+      "path": "electron/online/vendor/lrc-get",
+      "sha256": "dfd087ac48e02f642974163cd50e5d3f1c3e3a990d2dbcde59c7e484ff7ffd29",
+      "adapter": "electron/online/qq-lyric-codec.cjs"
     }
   ]
 }

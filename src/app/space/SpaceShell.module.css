@@ -8,3 +8,11 @@
   position: absolute;
   inset: 0;
 }
+
+/* Reserved independent slot; move beside the upstream control group when that layout is merged. */
+.onlineControl {
+  position: fixed;
+  left: var(--space-online-left, max(16px, env(safe-area-inset-left, 0px)));
+  top: var(--space-online-top, 68px);
+  z-index: 80;
+}

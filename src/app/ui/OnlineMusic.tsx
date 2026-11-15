@@ -5,6 +5,7 @@ import { Online, type LibView } from '../bridge';
 import { lib, useStore, fmtTime } from '../state';
 import { playIds } from '../playback/player';
 import { online, request, jobId } from '../online/state';
+import { run } from '../commands';
 import { openRemote } from '../actions/online';
 import {
   MUSIC_PLATFORMS,
@@ -14,12 +15,14 @@ import {
   type SearchResult,
   type MusicPlatform,
   type LoginState,
+  type OnlineLyrics,
 } from '../online/types';
 import { translationLines, readTranslationPaste, type TranslationFragment } from '../../engine';
 import { Button, Dropdown, Note, Cover } from './kit';
 import '../online/words';
 import s from './OnlineMusic.module.css';
 import cards from './CollectionCards.module.css';
+import { PlatformArtwork } from './PlatformArtwork';
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const platformName = (platform: string) => MUSIC_PLATFORMS.find(([id]) => id === platform)?.[1] || platform;
@@ -133,12 +136,16 @@ function LyricFields() {
 export function SearchSongs({
   onReferences,
   onQueued,
+  onLyrics,
+  initialQuery = '',
 }: {
   onReferences?: (fragments: TranslationFragment[]) => void;
   onQueued?(): void;
+  onLyrics?(lyrics: OnlineLyrics): void | Promise<void>;
+  initialQuery?: string;
 }) {
   const [platform, setPlatform] = useState('all'),
-    [query, setQuery] = useState(''),
+    [query, setQuery] = useState(initialQuery),
     [result, setResult] = useState<SearchResult | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
@@ -146,11 +153,12 @@ export function SearchSongs({
   const [quality, setQuality] = useQuality(platform);
   const [link, setLink] = useState('');
   const [selected, setSelected] = useState<string[]>([]),
-    [preview, setPreview] = useState<{ song: OnlineSong; original: string; translation: string } | null>(null);
+    [preview, setPreview] = useState<(OnlineLyrics & { song: OnlineSong }) | null>(null);
   const task = useRef(''),
     mounted = useRef(true),
     scope = useRef(0);
   const folder = useStore(online, (v) => v.folder);
+  const lyricOnly = !!onReferences || !!onLyrics;
   useEffect(
     () => () => {
       mounted.current = false;
@@ -199,7 +207,7 @@ export function SearchSongs({
       task.current = id;
       setBusy(true);
       try {
-        const value = await request<{ original: string; translation: string }>('lyrics', {
+        const value = await request<OnlineLyrics>('lyrics', {
           key: songKey(song),
           jobId: id,
         });
@@ -235,7 +243,7 @@ export function SearchSongs({
           {tx(busy ? 'on.wait' : 'on.search')}
         </Button>
       </form>
-      {!onReferences && (
+      {!lyricOnly && (
         <div className={s.toolbar}>
           {(platform === 'all' || platformInfo(platform).download) && (
             <>
@@ -248,7 +256,7 @@ export function SearchSongs({
           )}
         </div>
       )}
-      {!onReferences && (
+      {!lyricOnly && (
         <form
           className={s.toolbar}
           onSubmit={(event) => {
@@ -286,7 +294,7 @@ export function SearchSongs({
           </Button>
         </form>
       )}
-      {!onReferences && remoteHelp && <Note>{tx(remoteHelp)}</Note>}
+      {!lyricOnly && remoteHelp && <Note>{tx(remoteHelp)}</Note>}
       {error && <Note>{error}</Note>}
       {result?.errors.map((e) => (
         <Note key={e.platform}>
@@ -297,7 +305,7 @@ export function SearchSongs({
       <div className={s.rows}>
         {result?.tracks.map((song) => (
           <div className={s.row} key={songKey(song)}>
-            {!onReferences && (
+            {!lyricOnly && (
               <input
                 type="checkbox"
                 disabled={!platformInfo(song.platform).download}
@@ -318,7 +326,7 @@ export function SearchSongs({
             <Button size="sm" disabled={busy || !platformInfo(song.platform).lyrics} onClick={() => void lyrics(song)}>
               {tx('on.lyrics')}
             </Button>
-            {!onReferences && platformInfo(song.platform).remotePlayback && (
+            {!lyricOnly && platformInfo(song.platform).remotePlayback && (
               <Button
                 size="sm"
                 onClick={() =>
@@ -330,7 +338,7 @@ export function SearchSongs({
                 {tx('on.playBrowser')}
               </Button>
             )}
-            {!onReferences && platformInfo(song.platform).download && (
+            {!lyricOnly && platformInfo(song.platform).download && (
               <Button size="sm" onClick={() => void download([songKey(song)])}>
                 {tx('on.download')}
               </Button>
@@ -346,7 +354,28 @@ export function SearchSongs({
       {preview && (
         <section className={s.preview} data-test="online-lyrics-preview">
           <h3>{preview.song.title}</h3>
-          <pre>{preview.translation || preview.original}</pre>
+          <pre>{onLyrics ? preview.lrc || preview.original : preview.translation || preview.original}</pre>
+          {onLyrics && (
+            <>
+              <Note>{tx('on.fullTracksHelp')}</Note>
+              <Button
+                kind="primary"
+                disabled={busy}
+                onClick={() =>
+                  void act(async () => {
+                    setBusy(true);
+                    try {
+                      await onLyrics(preview);
+                    } finally {
+                      if (mounted.current) setBusy(false);
+                    }
+                  })
+                }
+              >
+                {tx('on.useFullLyrics')}
+              </Button>
+            </>
+          )}
           {!preview.translation && <Note>{tx('on.noTranslation')}</Note>}
           {onReferences && (
             <Button
@@ -369,13 +398,13 @@ export function SearchSongs({
     </div>
   );
 }
-export function SyncedPlaylists() {
+export function SyncedPlaylists({ playlistId, embedded = false }: { playlistId?: string; embedded?: boolean } = {}) {
   const playlists = useStore(lib, (v) => v.playlists).filter((p) => p.remote),
     [picked, setPicked] = useState(''),
     [platform, setPlatform] = useState<MusicPlatform | ''>(''),
     [error, setError] = useState('');
-  const selected = playlists.find((p) => p.id === picked);
-  const [quality, setQuality] = useQuality(platform || 'all');
+  const selected = playlists.find((p) => p.id === (playlistId || picked));
+  const [quality, setQuality] = useQuality(selected?.remote?.platform || platform || 'all');
   const remote = selected?.remote;
   const accounts = useStore(online, (v) => v.accounts),
     [busy, setBusy] = useState(false),
@@ -421,7 +450,7 @@ export function SyncedPlaylists() {
     <div className={s.stack} data-test="synced-playlists">
       <Note>{tx(remote ? platformInfo(remote.platform).syncHelp : 'on.syncHelp')}</Note>
       <div className={s.toolbar}>
-        {platform && (
+        {platform && !embedded && (
           <Button
             onClick={() => {
               setPicked('');
@@ -431,10 +460,10 @@ export function SyncedPlaylists() {
             {tx('on.platforms')}
           </Button>
         )}
-        {selected && <Button onClick={() => setPicked('')}>{tx('on.synced')}</Button>}
-        {platform &&
+        {selected && !embedded && <Button onClick={() => setPicked('')}>{tx('on.synced')}</Button>}
+        {(remote?.platform || platform) &&
           accounts
-            .filter((a) => a.platform === platform)
+            .filter((a) => a.platform === (remote?.platform || platform))
             .map((a) => (
               <Button key={a.platform} disabled={busy} onClick={() => void sync(a.platform)}>
                 {tx(busy ? 'on.wait' : 'on.sync')} · {a.name}
@@ -442,9 +471,9 @@ export function SyncedPlaylists() {
             ))}
         {busy && <Button onClick={() => void request('cancel', { jobId: task.current })}>{tx('on.cancel')}</Button>}
       </div>
-      {!platform && (
+      {!platform && !playlistId && (
         <div className={cards.cards}>
-          {MUSIC_PLATFORMS.map(([id, label], index) => (
+          {MUSIC_PLATFORMS.map(([id, label]) => (
             <div className={cards.cardWrap} key={id}>
               <button
                 className={cards.card}
@@ -453,19 +482,7 @@ export function SyncedPlaylists() {
                   setPicked('');
                 }}
               >
-                <span className={s.platformArt} data-platform={id} aria-hidden="true">
-                  <svg viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r={22 + index * 3} fill="none" stroke="currentColor" strokeWidth="3" />
-                    <path
-                      d="M25 62 42 30 57 70 76 38"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </span>
+                <PlatformArtwork platform={id} />
                 <b>{label}</b>
                 <small>{accounts.find((a) => a.platform === id)?.name || tx('on.signin')}</small>
               </button>
@@ -473,7 +490,7 @@ export function SyncedPlaylists() {
           ))}
         </div>
       )}
-      {platform && !selected && (
+      {platform && !selected && !playlistId && (
         <div className={cards.cards}>
           {playlists
             .filter(
@@ -485,7 +502,7 @@ export function SyncedPlaylists() {
             .map((p) => (
               <div className={cards.cardWrap} key={p.id}>
                 <button className={cards.card} onClick={() => setPicked(p.id)}>
-                  <Cover src={p.remote?.artworkUrl} />
+                  <Cover k={p.remote?.cover} src={p.remote?.cover ? undefined : p.remote?.artworkUrl} />
                   <b>{p.name}</b>
                   <small>
                     {p.remote?.songs.length} · {platformName(platform)}
@@ -499,10 +516,12 @@ export function SyncedPlaylists() {
       {!playlists.length && <Note>{tx('on.empty')}</Note>}
       {selected && remote && (
         <>
-          <div className={s.playlistHead}>
-            <Cover src={remote.artworkUrl} />
-            <h2>{selected.name}</h2>
-          </div>
+          {!embedded && (
+            <div className={s.playlistHead}>
+              <Cover k={remote.cover} src={remote.cover ? undefined : remote.artworkUrl} />
+              <h2>{selected.name}</h2>
+            </div>
+          )}
           <div className={s.toolbar}>
             {platformInfo(remote.platform).download && (
               <>
@@ -512,6 +531,12 @@ export function SyncedPlaylists() {
             )}
             <Button disabled={!selected.tracks.length} onClick={() => void playIds(selected.tracks, 0)}>
               {tx('on.playLocal')}
+            </Button>
+            <Button
+              disabled={!selected.tracks.length}
+              onClick={() => run('tracks.enqueue', { kind: 'tracks', ids: selected.tracks })}
+            >
+              {tx('s.queue.add')}
             </Button>
             {platformInfo(remote.platform).remotePlayback && (
               <>
@@ -557,7 +582,12 @@ export function SyncedPlaylists() {
                 {song.localId ? (
                   <Button
                     size="sm"
-                    onClick={() => void playIds(selected.tracks, selected.tracks.indexOf(song.localId!))}
+                    onClick={() =>
+                      void playIds(
+                        selected.tracks,
+                        remote.songs.slice(0, i + 1).filter((value) => value.localId).length - 1,
+                      )
+                    }
                   >
                     {tx('s.play')}
                   </Button>
@@ -740,6 +770,7 @@ export function DownloadList() {
       <Button onClick={() => void act('folder')}>{tx('on.folder')}</Button>
       <small>{state.folder}</small>
       <LyricFields />
+      <Note>{tx('on.nativeTtmlOnly')}</Note>
       {!state.jobs.length && <Note>{tx('on.empty')}</Note>}
       {error && <Note>{error}</Note>}
       {state.jobs.map((j) => (

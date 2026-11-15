@@ -23,6 +23,7 @@ export interface SpaceAlbum {
   ids: string[];
 }
 export interface SpacePlaylist {
+  cover?: string | null;
   id: string;
   name: string;
   note: string;
@@ -84,12 +85,18 @@ export function fromLibrary(
   if (fav.length) lists.push({ id: 'favorites', name: labels.favorites, note: labels.songs(fav.length), ids: fav });
   for (const p of playlists) {
     const ids = p.tracks.filter((id) => live.has(id));
-    lists.push({ id: p.id, name: p.name, note: labels.songs(ids.length), ids });
+    lists.push({
+      id: p.id,
+      name: p.name,
+      note: labels.songs(p.remote ? p.remote.songs.length : ids.length),
+      ids,
+      ...(p.remote ? { cover: p.remote.cover || null } : {}),
+    });
   }
   const sig = [
     songs.map((s) => s.id + s.title + s.cover).join('|'),
     albums.map((a) => a.key + a.cover).join('|'),
-    lists.map((l) => l.id + l.name + l.ids.join(',')).join('|'),
+    lists.map((l) => l.id + l.name + l.note + (l.cover || '') + l.ids.join(',')).join('|'),
   ].join('#');
   return { songs, albums, playlists: lists, sig };
 }

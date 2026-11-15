@@ -6,6 +6,7 @@ import { tx } from '../../i18n';
 import { Lib, type Track } from '../bridge';
 import { lib, useStore, useIndex, fmtTime } from '../state';
 import { Icon } from '../ui/icons';
+import { SyncedPlaylists } from '../ui/OnlineMusic';
 import { Cover } from '../ui/kit';
 import { player, playIds } from '../playback/player';
 import { addToPlaylist, renamePlaylist, run, type Target } from '../commands';
@@ -77,6 +78,36 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
     };
   }, [detail, idx, playlists, favs]);
   if (!detail || !view) return null;
+  const remotePlaylist = detail.kind === 'playlist' ? playlists.find((p) => p.id === detail.key && p.remote) : null;
+  if (remotePlaylist?.remote)
+    return (
+      <section
+        className={`hud card ${s.panel} ${s.detail}`}
+        aria-label={remotePlaylist.name}
+        data-test="space-detail"
+        data-remote="true"
+      >
+        <header className={s.dhead}>
+          <span className={s.dcover}>
+            <Cover
+              k={remotePlaylist.remote.cover}
+              src={remotePlaylist.remote.cover ? undefined : remotePlaylist.remote.artworkUrl}
+            />
+          </span>
+          <div>
+            <small className={s.eye}>{ts('kind.list')}</small>
+            <b className={s.dtitle}>{remotePlaylist.name}</b>
+            <small>{tx('s.tracks', { n: remotePlaylist.remote.songs.length })}</small>
+          </div>
+          <button className={s.x} onClick={onClose} aria-label={ts('close')}>
+            ✕
+          </button>
+        </header>
+        <div className={s.remoteBody}>
+          <SyncedPlaylists playlistId={remotePlaylist.id} embedded />
+        </div>
+      </section>
+    );
   const ids = view.tracks.map((t) => t.id),
     one = detail.kind === 'song';
   const fav = (id: string) => idx.fav.has(id),

@@ -1,3 +1,4 @@
+const { kugouTracks } = require('../lyric-formats.cjs');
 const { randomBytes } = require('node:crypto');
 const QRCode = require('qrcode');
 const { first, cookies, searchResult, pageResult, downloadResult } = require('./helpers.cjs');
@@ -114,12 +115,23 @@ module.exports = ({ call, getDevice, setDevice }) => {
       );
       const candidate = b.candidates?.[0] || b.data?.candidates?.[0];
       if (!candidate) throw Error('No lyrics available');
+      try {
+        const r = await call(
+          'lyric',
+          { id: candidate.id, accesskey: candidate.accesskey, fmt: 'krc', decode: true },
+          signal,
+        );
+        const full = kugouTracks(first(r, ['decodeContent', 'lyric']));
+        if (full.original) return full;
+      } catch {
+        signal?.throwIfAborted();
+      }
       const r = await call(
         'lyric',
         { id: candidate.id, accesskey: candidate.accesskey, fmt: 'lrc', decode: true },
         signal,
       );
-      return { original: first(r, ['decodeContent', 'lyric', 'content']), translation: '' };
+      return { original: first(r, ['decodeContent', 'lyric', 'content']), translation: '', pronunciation: '' };
     },
   };
 };

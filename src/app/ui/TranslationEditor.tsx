@@ -307,6 +307,7 @@ export function TranslationEditor({ source, song, apply, close }: Props) {
             )}
             {mode === 'search' && (
               <SearchSongs
+                initialQuery={song.title}
                 onReferences={(refs) => {
                   setExtra((v) => [...v, ...refs]);
                   setMode('paste');

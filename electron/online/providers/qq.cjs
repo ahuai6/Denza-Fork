@@ -1,5 +1,7 @@
+const { decodeOnlineLyric, qrcLrc } = require('../qq-lyric-codec.cjs');
+const { decodeText } = require('../lyric-formats.cjs');
 const { first, searchResult, pageResult, downloadResult } = require('./helpers.cjs');
-module.exports = ({ call }) => ({
+module.exports = ({ call, json }) => ({
   query: (method, params, credential) =>
     ['getUserPlaylists', 'getUserDetail'].includes(method)
       ? { ...params, cookie: credential.cookie }
@@ -64,12 +66,61 @@ module.exports = ({ call }) => ({
     };
   },
   async lyrics(track, signal) {
-    const b = await call('getLyric', { songmid: track.id, isFormat: false }, signal);
-    const decode = (s) =>
-      !s || s.includes('[') || s.includes('\n') ? s || '' : Buffer.from(s, 'base64').toString('utf8');
+    let b;
+    try {
+      b = await call(
+        'getLyric',
+        { songmid: track.id, songid: track.lyricId, isFormat: false, trans: 1, roma: 1 },
+        signal,
+      );
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (!json) throw error;
+      b = {};
+    }
+    if (json) {
+      try {
+        const body = await json('https://u.y.qq.com/cgi-bin/musicu.fcg', {
+          method: 'POST',
+          signal: AbortSignal.any([AbortSignal.timeout(8000), ...(signal ? [signal] : [])]),
+          headers: { 'Content-Type': 'application/json', Referer: 'https://y.qq.com/' },
+          body: JSON.stringify({
+            comm: { ct: 24, cv: 0 },
+            req_0: {
+              module: 'music.musichallSong.PlayLyricInfo',
+              method: 'GetPlayLyricInfo',
+              param: {
+                songMID: track.id,
+                songID: Number(track.lyricId || 0),
+                qrc: 0,
+                trans: 1,
+                roma: 1,
+                crypt: 0,
+                lrc_t: 0,
+                qrc_t: 0,
+                trans_t: 0,
+                roma_t: 0,
+              },
+            },
+          }),
+        });
+        const extra = body.req_0?.data;
+        if (extra) {
+          const decoded = Object.fromEntries(
+            ['lyric', 'trans', 'roma']
+              .map((key) => [key, qrcLrc(decodeOnlineLyric(extra[key]))])
+              .filter(([, value]) => value),
+          );
+          b = { ...b, ...decoded };
+        }
+      } catch {
+        signal?.throwIfAborted();
+      }
+    }
     return {
-      original: decode(first(b, ['lyric', 'data.lyric'])),
-      translation: decode(first(b, ['trans', 'translyric', 'data.trans'])),
+      original: decodeText(first(b, ['lyric', 'data.lyric'])),
+      translation: decodeText(first(b, ['trans', 'translyric', 'data.trans'])),
+      pronunciation: decodeText(first(b, ['roma', 'romalrc', 'data.roma'])),
     };
   },
 });

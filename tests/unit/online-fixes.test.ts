@@ -13,12 +13,14 @@ const { Downloads } = require('../../electron/downloads.cjs');
 const track = { platform: 'apple', id: '123', title: 'Synthetic', artist: 'Fixture', album: 'Test', duration: 1 };
 const original = '[00:00.10]First & next\n[00:00.50]Second';
 const translation = '[00:00.10]第一句\n[00:00.50]第二句';
+const nativeFixture =
+  '<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata"><body><div><p begin="0.1s" end="0.5s">First &amp; next<span ttm:role="x-translation">第一句</span></p><p begin="0.5s" end="1s">Second<span ttm:role="x-translation">第二句</span></p></div></body></tt>';
 describe('download lyrics and container fields', () => {
-  it('preserves native TTML exactly and retains translations in both conversions', () => {
-    const generated = downloadLyricFormats(original, translation);
-    expect(translationLines(generated.ttml).map((l) => l.translation)).toEqual(['第一句', '第二句']);
-    const native = downloadLyricFormats(generated.ttml);
-    expect(native.ttml).toBe(generated.ttml);
+  // Denza.3: LRC is no longer synthesized into TTML; native documents remain byte-for-byte intact.
+  it('preserves native TTML and never turns LRC into TTML', () => {
+    expect(downloadLyricFormats(original, translation).ttml).toBe('');
+    const native = downloadLyricFormats(nativeFixture);
+    expect(native.ttml).toBe(nativeFixture);
     expect(native.converted).toBe(false);
     expect(native.lrc).toContain('第一句');
   });
@@ -33,8 +35,20 @@ describe('download lyrics and container fields', () => {
           const file = join(dir, mode + fixture);
           await copyFile(source, file);
           // Seed both tags, then verify switching to a single field removes the other.
-          writeDownloadTags(file, fixture.split('.').at(-1), track, { original, translation }, 'both');
-          const state = writeDownloadTags(file, fixture.split('.').at(-1), track, { original, translation }, mode);
+          writeDownloadTags(
+            file,
+            fixture.split('.').at(-1),
+            track,
+            { original, translation, ttml: nativeFixture },
+            'both',
+          );
+          const state = writeDownloadTags(
+            file,
+            fixture.split('.').at(-1),
+            track,
+            { original, translation, ttml: nativeFixture },
+            mode,
+          );
           const checked = await parseFile(file);
           verifyLyrics(checked, state);
           expect(checked.format.duration).toBeCloseTo(before.format.duration!, 2);
@@ -52,7 +66,7 @@ describe('download lyrics and container fields', () => {
 describe('provider compatibility fixes', () => {
   it('reads an AM album song link and fetches TTML without account credentials', async () => {
     const calls: URL[] = [];
-    const ttml = downloadLyricFormats(original, translation).ttml;
+    const ttml = nativeFixture;
     const client = new LyricsFlowAudio(undefined, async (input: string, options: RequestInit) => {
       expect(options.credentials).toBe('omit');
       expect(options.headers).toBeUndefined();
@@ -159,7 +173,7 @@ describe('provider compatibility fixes', () => {
             if (q === 'hires') throw Error('Unavailable');
             return { url: 'https://audio.example/full', expectedFormat: 'flac', source: 'Fixture' };
           },
-          lyrics: async () => ({ original, translation }),
+          lyrics: async () => ({ original, translation, ttml: nativeFixture }),
         },
         { importDownload: async () => {} },
         () => {},

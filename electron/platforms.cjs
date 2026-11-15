@@ -13,6 +13,7 @@ class Platforms {
     this.sessions = new Map();
     this.providers = createProviders(
       (platform) => ({
+        json: services.json,
         call: (method, params, signal, override) => this.call(platform, method, params, signal, override),
         getDevice: () => store.data.device,
         setDevice: async (device) => {
@@ -119,7 +120,10 @@ class Platforms {
     return provider.lookup(input, signal);
   }
   async lyrics(track, signal) {
-    return this.provider(track.platform).lyrics(track, signal);
+    const found = await this.provider(track.platform).lyrics(track, signal);
+    if (!found?.original?.trim() && !found?.ttml?.trim()) throw Error('No lyrics available');
+    const { downloadLyricFormats } = require('./generated/lyrics.cjs');
+    return { ...found, ...downloadLyricFormats(found.ttml || found.original, found.translation, found.pronunciation) };
   }
   async open(song, playlist) {
     const provider = this.provider(song?.platform || playlist?.platform);

@@ -12,6 +12,7 @@ export interface OnlineSong {
   albumAudioId?: string;
   mediaId?: string;
   localId?: string | null;
+  lyricId?: string;
   catalogId?: string;
   storefront?: string;
 }
@@ -20,6 +21,7 @@ export interface RemotePlaylist {
   uid: string;
   id: string;
   artworkUrl?: string;
+  cover?: string | null;
   updated: number;
   songs: OnlineSong[];
 }
@@ -91,3 +93,12 @@ export function platformInfo(platform: string): PlatformInfo {
   return info;
 }
 export const songKey = (song: OnlineSong) => `${song.platform}:${song.id}`;
+
+export interface OnlineLyrics {
+  original: string;
+  translation: string;
+  pronunciation?: string;
+  lrc: string;
+  ttml?: string;
+  source?: string;
+}

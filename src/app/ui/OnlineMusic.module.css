@@ -148,7 +148,7 @@
   place-items: center;
   aspect-ratio: 1;
   border-radius: var(--r-3);
-  background: var(--bg-2);
+  background: color-mix(in srgb, currentColor 12%, var(--bg));
   color: var(--fg-2);
 }
 .platformArt svg {
@@ -156,16 +156,17 @@
   height: 65%;
 }
 .platformArt[data-platform='netease'] {
-  color: #c96778;
+  color: #e7373e;
 }
 .platformArt[data-platform='qq'] {
-  color: #47a887;
+  color: #1dbf76;
 }
 .platformArt[data-platform='kugou'] {
-  color: #598dc1;
+  color: #168ee0;
 }
 .platformArt[data-platform='apple'] {
-  color: #9a7bd2;
+  background: #121212;
+  color: #fff;
 }
 .playlistHead {
   display: flex;

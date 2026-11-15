@@ -2429,14 +2429,16 @@ export function createWorld(
   const listMeshes = [];
   // a playlist's collage is its first four songs' covers
   const collageOf = (pl) =>
-    thumbs.collage(
-      pl.ids
-        .slice(0, 4)
-        .map((id) => SONGS[songById.get(id)])
-        .filter(Boolean)
-        .map((sg) => ({ url: bind.cover(sg.cover), key: sg.albumKey || sg.id })),
-      pl.id,
-    );
+    pl.cover
+      ? thumbs.get(bind.cover(pl.cover), pl.id)
+      : thumbs.collage(
+          pl.ids
+            .slice(0, 4)
+            .map((id) => SONGS[songById.get(id)])
+            .filter(Boolean)
+            .map((sg) => ({ url: bind.cover(sg.cover), key: sg.albumKey || sg.id })),
+          pl.id,
+        );
   function buildLists() {
     shadowDirty = true;
     listMeshes.forEach((L) => {
