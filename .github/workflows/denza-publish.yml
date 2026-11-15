@@ -35,9 +35,12 @@ jobs:
           gh api "repos/$GH_REPO/contents/package.json?ref=$build_sha" --jq '.content' | base64 --decode > build-package.json
           version=$(jq -r '.version' build-package.json)
           test "$RELEASE_TAG" = "v$version"
-          gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" > draft-release.json
+          gh api --paginate "repos/$GH_REPO/releases" | jq --arg tag "$RELEASE_TAG" '.[] | select(.tag_name == $tag)' > draft-release.json
+          test -s draft-release.json
+          jq -s -e 'length == 1' draft-release.json
           jq -e --arg sha "$build_sha" '.draft == true and .target_commitish == $sha and (.assets | length) == 0' draft-release.json
           printf 'VERSION=%s\n' "$version" >> "$GITHUB_ENV"
+          printf 'RELEASE_ID=%s\n' "$(jq -r '.id' draft-release.json)" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@v4
         with:
           name: Denza-Fork-Windows-x64
@@ -55,7 +58,7 @@ jobs:
           sed -i 's/\r$//' SHA256SUMS.txt
           sha256sum --check --strict SHA256SUMS.txt
           gh release upload "$RELEASE_TAG" "Cadenza-Setup-$VERSION.exe" "Cadenza-$VERSION-portable.exe" SHA256SUMS.txt
-          gh api "repos/$GH_REPO/releases/tags/$RELEASE_TAG" --jq '[.assets[].name]'
+          gh api "repos/$GH_REPO/releases/$RELEASE_ID" --jq '[.assets[].name]'
       - name: Publish release
         shell: bash
         run: gh release edit "$RELEASE_TAG" --draft=false --latest
