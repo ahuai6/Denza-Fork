@@ -1,6 +1,7 @@
 const { createHash } = require('node:crypto');
 const ORIGIN = 'https://music.apple.com';
 const API = 'https://amp-api.music.apple.com';
+const METADATA_LANGUAGE = 'zh-Hans-CN';
 const PARTITION = 'persist:denza-apple-music';
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
@@ -58,7 +59,7 @@ function appleFetch(net, url, options) {
 
 // Account/catalog behavior is adapted from the user's LyricsFlow 1.3.0. Playback remains Apple-hosted.
 function appleSong(item, storefront) {
-  const a = item.attributes || {};
+  const a = { ...item.attributes, ...item.relationships?.catalog?.data?.[0]?.attributes };
   const catalog =
     item.relationships?.catalog?.data?.[0]?.id ||
     a.playParams?.catalogId ||
@@ -166,15 +167,18 @@ class AppleMusic {
     if (!path.startsWith('/v1/')) throw Error('Invalid Apple Music API path');
     signal = AbortSignal.any([this.lifetime.signal, AbortSignal.timeout(90000), ...(signal ? [signal] : [])]);
     const tokens = await this.developerTokens(signal);
+    const localized = new URL(API + path);
+    localized.searchParams.set('l', METADATA_LANGUAGE);
     const user = credential ?? this.store.credential('apple').cookie;
     for (const token of tokens) {
       try {
         return JSON.parse(
           await this.text(
-            API + path,
+            localized.href,
             {
               Authorization: 'Bearer ' + token.token,
               Origin: ORIGIN,
+              'Accept-Language': 'zh-CN,zh;q=0.9',
               ...(user ? { 'Music-User-Token': user } : {}),
             },
             signal,
@@ -311,6 +315,41 @@ class AppleMusic {
     if (!Array.isArray(rows)) throw Error('Incomplete Apple Music search');
     return rows.map((row) => appleSong(row, storefront));
   }
+  // Link expansion uses the public file service for IDs, but metadata uses Apple's localized catalog.
+  async localizeSongs(tracks, signal) {
+    const groups = new Map();
+    for (const track of tracks) {
+      if (!/^\d+$/.test(track.catalogId || '')) continue;
+      const sf = /^[a-z]{2}$/.test(track.storefront || '') ? track.storefront : 'us';
+      if (!groups.has(sf)) groups.set(sf, new Set());
+      groups.get(sf).add(track.catalogId);
+    }
+    const found = new Map();
+    for (const [sf, keys] of groups) {
+      const ids = [...keys];
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const result = await this.api(
+          '/v1/catalog/' + sf + '/songs?ids=' + ids.slice(offset, offset + 100).join(','),
+          signal,
+          '',
+        );
+        if (!Array.isArray(result.data)) throw Error('Incomplete Apple Music metadata');
+        for (const row of result.data) found.set(sf + ':' + row.id, appleSong(row, sf));
+      }
+    }
+    return tracks.map((track) => {
+      const metadata = found.get((track.storefront || 'us') + ':' + track.catalogId);
+      return metadata
+        ? {
+            ...track,
+            title: metadata.title || track.title,
+            artist: metadata.artist || track.artist,
+            album: metadata.album || track.album,
+            artworkUrl: metadata.artworkUrl || track.artworkUrl,
+          }
+        : track;
+    });
+  }
   async page(kind, id, page, signal) {
     const account = this.store.credential('apple');
     if (!account.uid) throw Error('Sign in to Apple Music first');
@@ -374,4 +413,4 @@ class AppleMusic {
     this.closeWindows();
   }
 }
-module.exports = { AppleMusic, appleFetch, appleSong, applePage, appleNavigation, PARTITION };
+module.exports = { AppleMusic, appleFetch, appleSong, applePage, appleNavigation, PARTITION, METADATA_LANGUAGE };

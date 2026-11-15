@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { tx } from '../../i18n';
 import { Lib, type Track } from '../bridge';
-import { lib, useStore, useIndex, fmtTime } from '../state';
+import { lib, ui, useStore, useIndex, fmtTime } from '../state';
 import { Icon } from '../ui/icons';
 import { SyncedPlaylists } from '../ui/OnlineMusic';
 import { Cover } from '../ui/kit';
@@ -29,7 +29,7 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
   useEffect(() => {
     if (!detail) return;
     const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !ui.get().dialog) {
         if (adding) setAdding(null);
         else onClose();
       }

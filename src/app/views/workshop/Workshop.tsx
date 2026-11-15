@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { tx, LANGS, currentLang, type Lang } from '../../../i18n';
 import type { Session } from '../../../engine';
 import { desktop, offerFile, pickSavePath, D, type Track } from '../../bridge';
-import { ui, useStore, toast } from '../../state';
+import { ui, useStore, modalOpen, toast } from '../../state';
 import { Icon } from '../../ui/icons';
 import { Button, IconButton, Section, Row, Check, TextField, Note, Slider, Dropdown } from '../../ui/kit';
 import { CueBar, cueKeyDown } from '../../ui/cues';
@@ -32,6 +32,7 @@ import {
   queueImport,
 } from '../../workshop/project';
 import s from './Workshop.module.css';
+import { DialogOwner } from '../../ui/DialogOwner';
 import { TranslationEditor } from '../../ui/TranslationEditor';
 
 const TABS: [string, string, string][] = [
@@ -116,7 +117,7 @@ export function Workshop({ note, web }: { note?: boolean; web?: boolean }) {
   // keyboard: space plays, arrows seek (Shift for 5 s), Home and End jump, F fills the screen; never while typing
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest('input,textarea,select,[contenteditable]') || ui.get().modal) return;
+      if ((e.target as HTMLElement).closest('input,textarea,select,[contenteditable]') || modalOpen()) return;
       const ss = ws.get().session;
       if (!ss) return;
       if (e.code === 'Space') {
@@ -482,7 +483,7 @@ function LyricsPane({ s: ss }: { s: Session }) {
     }
   };
   return (
-    <>
+    <DialogOwner>
       <Section>
         <Note>{tx('lyr.intro')}</Note>
         <details className={s.help}>
@@ -648,7 +649,7 @@ function LyricsPane({ s: ss }: { s: Session }) {
         </Row>
         {projMsg && <Note>{projMsg}</Note>}
       </Section>
-    </>
+    </DialogOwner>
   );
 }
 /** The cover and the background video of the project. */

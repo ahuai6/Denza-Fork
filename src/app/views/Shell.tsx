@@ -1,10 +1,11 @@
+import { DialogOwner } from '../ui/DialogOwner';
 // The desktop app, as a stage (docs/DESIGN.md): the playing song is the stage (the engine's picture and the play page);
 // the library, the poster wall, the workshop and the settings are pages on one sheet of paper that rises over it; the
 // player bar is the stage's apron, there in both; the title bar floats above everything with the places to go.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { tx, lang as langStore } from '../../i18n';
 import { D } from '../bridge';
-import { ui, lib, settings, useStore, keep, type Page } from '../state';
+import { ui, lib, settings, useStore, modalOpen, keep, type Page } from '../state';
 import { Icon } from '../ui/icons';
 import { ContextMenu, Toast, Turn } from '../ui/kit';
 import { player } from '../playback/player';
@@ -70,7 +71,8 @@ function useTheme() {
 export function Shell() {
   const page = useStore(ui, (x) => x.page),
     layer = useStore(ui, (x) => x.layer),
-    modal = useStore(ui, (x) => !!x.modal),
+    modal = useStore(ui, modalOpen),
+    dialogOpen = useStore(ui, (state) => !!state.dialog),
     menu = useStore(ui, (x) => !!x.menu);
   const hasTrack = useStore(player, (x) => !!x.id),
     songId = useStore(player, (x) => x.shownId || x.id);
@@ -130,6 +132,7 @@ export function Shell() {
     <div
       key={lng}
       className={s.shell}
+      inert={dialogOpen}
       data-page={page}
       data-layer={layer}
       data-top={top}
@@ -175,7 +178,9 @@ export function Shell() {
         </Guard>
       )}
       <Guard name="queue" k={songId}>
-        <QueuePanel />
+        <DialogOwner>
+          <QueuePanel />
+        </DialogOwner>
       </Guard>
       <ModalHost />
       {mini && <MiniLyrics />}

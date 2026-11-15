@@ -106,7 +106,7 @@ export function SpacePanel({ panel, onClose }: { panel: Panel; onClose: () => vo
   useEffect(() => {
     if (!panel) return;
     const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !ui.get().dialog) onClose();
     };
     addEventListener('keydown', k);
     return () => removeEventListener('keydown', k);

@@ -8,6 +8,7 @@ import {
   type TranslationFragment,
   type TranslationMatch,
 } from '../../engine';
+import { dialogs } from '../actions/dialogs';
 import { request, jobId } from '../online/state';
 import type { TranslationProvider } from '../online/types';
 import { OnlineDialog, SearchSongs } from './OnlineMusic';
@@ -446,7 +447,7 @@ export function TranslationEditor({ source, song, apply, close }: Props) {
                       ),
                     ),
                   );
-                  close();
+                  dialogs.dismiss();
                 }}
               >
                 {tx('tr.apply')}

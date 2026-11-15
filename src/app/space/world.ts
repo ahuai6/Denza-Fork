@@ -3562,7 +3562,8 @@ export function createWorld(
     }
   });
   onW('keydown', (e) => {
-    if (e.target instanceof Element && e.target.closest('[role="dialog"], [role="listbox"]')) return;
+    if (e.defaultPrevented || (e.target instanceof Element && e.target.closest('[role="dialog"], [role="listbox"]')))
+      return;
     if (e.key === '/' && !typing()) {
       e.preventDefault();
       $('q').focus();

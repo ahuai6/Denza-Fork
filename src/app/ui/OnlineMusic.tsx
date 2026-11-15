@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { tx } from '../../i18n';
 import { Online, type LibView } from '../bridge';
@@ -6,6 +6,7 @@ import { lib, ui, settings, useStore, fmtTime } from '../state';
 import { playIds } from '../playback/player';
 import { online, request, jobId } from '../online/state';
 import { run } from '../commands';
+import { dialogs } from '../actions/dialogs';
 import { openRemote } from '../actions/online';
 import {
   MUSIC_PLATFORMS,
@@ -30,15 +31,34 @@ const platformName = (platform: string) => MUSIC_PLATFORMS.find(([id]) => id ===
 export function OnlineDialog({ title, children, close }: { title: string; children: ReactNode; close(): void }) {
   const surface = useOnlineSurface();
   const picture = useStore(ui, (state) => state.layer !== 'none');
-  const ref = useRef<HTMLElement>(null);
-  useEffect(() => {
+  const ref = useRef<HTMLElement>(null),
+    id = useId(),
+    onClose = useRef(close);
+  onClose.current = close;
+  const active = useStore(ui, (state) => state.dialog === id);
+  useLayoutEffect(() => {
     const prior = document.activeElement;
-    ref.current?.focus();
+    const lease = dialogs.claim(id, () => onClose.current());
+    return () => {
+      lease.release();
+      if (lease.restoreFocus() && prior instanceof HTMLElement)
+        requestAnimationFrame(() => {
+          if (!ui.get().dialog && prior.isConnected && prior.getClientRects().length && !prior.closest('[inert]'))
+            prior.focus();
+        });
+    };
+  }, [id]);
+  useLayoutEffect(() => {
+    if (active) ref.current?.focus();
+  }, [active]);
+  useEffect(() => {
+    if (!active) return;
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (ref.current?.querySelector('[role="listbox"]')) return;
+        if (ref.current?.querySelector('[role="listbox"]:not([data-closing])')) return;
+        e.preventDefault();
         e.stopImmediatePropagation();
-        close();
+        dialogs.dismiss();
       }
       if (e.key === 'Tab') {
         const items = [
@@ -61,18 +81,18 @@ export function OnlineDialog({ title, children, close }: { title: string; childr
       }
     };
     addEventListener('keydown', key, true);
-    return () => {
-      removeEventListener('keydown', key, true);
-      if (prior instanceof HTMLElement) prior.focus();
-    };
-  }, []);
+    return () => removeEventListener('keydown', key, true);
+  }, [active]);
+  if (!active) return null;
   return createPortal(
     <div
       className={s.overlay + ' ' + surface.className + (!surface.space && picture ? ' on-picture' : '')}
       data-online-scene={surface.space ? 'space' : 'classic'}
-      onKeyDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key !== 'F11') e.stopPropagation();
+      }}
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget) close();
+        if (e.target === e.currentTarget) dialogs.dismiss();
       }}
     >
       <section
@@ -85,7 +105,7 @@ export function OnlineDialog({ title, children, close }: { title: string; childr
       >
         <header className={s.header}>
           <h2>{title}</h2>
-          <Button onClick={close}>{tx('on.close')}</Button>
+          <Button onClick={() => dialogs.dismiss()}>{tx('on.close')}</Button>
         </header>
         {children}
       </section>

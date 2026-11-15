@@ -289,3 +289,77 @@ describe('Apple Music platform', () => {
     expect(a.window).toBe(null);
   });
 });
+
+describe('simplified Chinese metadata policy', () => {
+  it('pins language for search, library and continuation requests without changing the account storefront', async () => {
+    const s = store();
+    await s.setAccount('apple', { uid: 'fixture', cookie: 'private', storefront: 'us' });
+    const calls: { url: URL; headers: Record<string, string> }[] = [];
+    const a = new AppleMusic(
+      s,
+      () => {},
+      async (input: string, options: { headers: Record<string, string> }) => {
+        const url = new URL(input);
+        calls.push({ url, headers: options.headers });
+        return new Response(
+          JSON.stringify(url.pathname.endsWith('/search') ? { results: { songs: { data: [] } } } : { data: [] }),
+        );
+      },
+    );
+    a.tokens = [{ token: 'fixture-public', exp: Date.now() / 1000 + 3600 }];
+    await a.search('fixture', 1);
+    await a.page('lists', '', 1);
+    await a.api('/v1/me/library/playlists?offset=opaque&l=en-US');
+    expect(calls).toHaveLength(3);
+    for (const call of calls) {
+      expect(call.url.searchParams.get('l')).toBe('zh-Hans-CN');
+      expect(call.headers['Accept-Language']).toContain('zh-CN');
+    }
+    expect(calls[0].url.pathname).toContain('/catalog/us/');
+    expect(calls[2].url.searchParams.get('offset')).toBe('opaque');
+    expect(s.credential('apple').storefront).toBe('us');
+  });
+  it('localizes public-link metadata anonymously and preserves library/catalog identities and missing translations', async () => {
+    const s = store();
+    await s.setAccount('apple', { uid: 'fixture', cookie: 'private', storefront: 'us' });
+    const a = new AppleMusic(
+      s,
+      () => {},
+      async (input: string, options: { headers: Record<string, string> }) => {
+        const url = new URL(input);
+        expect(url.searchParams.get('l')).toBe('zh-Hans-CN');
+        expect(url.searchParams.get('ids')).toBe('123,456');
+        expect(options.headers['Music-User-Token']).toBeUndefined();
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: '123',
+                type: 'songs',
+                attributes: { name: '测试歌名', artistName: '测试歌手', albumName: '测试专辑' },
+              },
+            ],
+          }),
+        );
+      },
+    );
+    a.tokens = [{ token: 'fixture-public', exp: Date.now() / 1000 + 3600 }];
+    const tracks = [
+      { id: 'i.library', catalogId: '123', storefront: 'us', title: 'English', artist: 'Artist', album: 'Album' },
+      { id: '456', catalogId: '456', storefront: 'us', title: 'Original name' },
+      { id: 'i.upload', catalogId: '', title: 'My upload' },
+    ];
+    const result = await a.localizeSongs(tracks);
+    expect(result[0]).toMatchObject({
+      id: 'i.library',
+      catalogId: '123',
+      storefront: 'us',
+      title: '测试歌名',
+      artist: '测试歌手',
+      album: '测试专辑',
+    });
+    expect(result[1]).toEqual(tracks[1]);
+    expect(result[2]).toEqual(tracks[2]);
+    expect(tracks[0].title).toBe('English');
+  });
+});

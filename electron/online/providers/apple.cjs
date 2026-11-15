@@ -10,5 +10,5 @@ module.exports = (_host, apple, audio = new LyricsFlowAudio()) => ({
   },
   resolve: (track, quality) => audio.resolve(track, quality),
   lyrics: (track, signal) => audio.lyrics(track, signal),
-  lookup: (input, signal) => audio.lookup(input, signal),
+  lookup: async (input, signal) => apple.localizeSongs(await audio.lookup(input, signal), signal),
 });
