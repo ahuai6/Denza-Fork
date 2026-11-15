@@ -1,3 +1,4 @@
+import { dialogs } from './dialogs';
 // Starting the interface, whatever it looks like: the settings (and the engine configured from them), the language,
 // the library and its live updates, the last song (paused), the background analysis; the keys; moving between pages.
 // And the hooks the desktop tests read (window.__cadenza): a new interface keeps them by keeping this module.
@@ -84,6 +85,10 @@ export function bindKeys(): () => void {
   const k = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement).closest('input,textarea,select,[contenteditable]')) return;
     const u = ui.get();
+    if (u.dialog && e.key !== 'F11') {
+      if (e.key === 'Escape') dialogs.dismiss();
+      return;
+    }
     if (e.key === 'Escape') {
       if (u.modal) ui.set({ modal: null });
       else if (u.queue) ui.set({ queue: false });

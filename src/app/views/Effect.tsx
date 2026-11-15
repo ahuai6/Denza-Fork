@@ -5,7 +5,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { tx } from '../../i18n';
 import { D, Lib } from '../bridge';
-import { ui, settings, useStore, trackOf, toast, openMenu } from '../state';
+import { ui, settings, useStore, modalOpen, trackOf, toast, openMenu } from '../state';
 import { Button, IconButton, Row, Slider, Note, Section, Dropdown, Cover } from '../ui/kit';
 import { CueBar, cueKeyDown } from '../ui/cues';
 import { Icon } from '../ui/icons';
@@ -36,6 +36,7 @@ import s from './Effect.module.css';
 import { PerfHud } from './PerfHud';
 import { isTtml, ttmlToLrc } from '../../engine';
 import { OnlineLyricsSearch } from '../ui/OnlineLyricsSearch';
+import { DialogOwner } from '../ui/DialogOwner';
 import { TranslationEditor } from '../ui/TranslationEditor';
 
 const IDLE_MS = 2600;
@@ -44,7 +45,7 @@ export function EffectView() {
   const layer = useStore(ui, (x) => x.layer),
     full = useStore(ui, (x) => x.win.full),
     queue = useStore(ui, (x) => x.queue),
-    modal = useStore(ui, (x) => !!x.modal);
+    modal = useStore(ui, modalOpen);
   const shownId = useStore(player, (x) => x.shownId),
     session = useStore(player, (x) => x.session),
     hasLyrics = useStore(player, (x) => x.hasLyrics);
@@ -89,7 +90,7 @@ export function EffectView() {
   useEffect(() => {
     if (!on) return;
     const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !ui.get().modal && (list || panel)) {
+      if (e.key === 'Escape' && !modalOpen() && (list || panel)) {
         e.stopImmediatePropagation();
         setList(false);
         setPanel(false);
@@ -147,7 +148,11 @@ export function EffectView() {
           />
         </div>
       </div>
-      {on && session && <SongPanel open={panel} onClose={() => setPanel(false)} />}
+      {on && session && (
+        <DialogOwner>
+          <SongPanel open={panel} onClose={() => setPanel(false)} />
+        </DialogOwner>
+      )}
     </div>
   );
 }
@@ -258,7 +263,7 @@ function SongPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
         !composing.current &&
         !typing() &&
         document.hasFocus() &&
-        !ui.get().modal &&
+        !modalOpen() &&
         !ui.get().menu &&
         !document.querySelector('[data-colorpop]')
       )

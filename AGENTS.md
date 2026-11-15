@@ -9,3 +9,6 @@
 - 用户已授权：以后每次完成修改并通过必要检查后，直接合并到 `custom`、构建并发布 GitHub Release，无需再次询问。开发期间可用功能分支/草稿 PR；完成后主动转为可合并并发布。不得覆盖既有 Release 资产或跳过失败检查；仅文档等不影响产物的变更可复用已验证且已合并的相同运行代码构建。
 - 不得把未验证的真实账号、Windows 音频或完整图形回归宣称为通过，验证记录见 `docs/DENZA-VALIDATION.md`。
 - 空间“在线”入口按用户要求仅显示这两个字，目前独立放在左上角；将来用户要求同步上游左上角控制栏时，把它作为控制项右侧的独立按钮接入，不提前同步上游。位置由 `SpaceShell.module.css` 的 `.onlineControl` 及预留 CSS 变量控制。
+
+- 新增窗口须通过 `actions/dialogs.ts` / `ui/DialogOwner.tsx` 接入原生层级、互斥、输入与草稿恢复逻辑；不得仅以独立 portal 开关叠在原面板上。空间主面板通过 `SpaceShell` 的 `SpaceView` 选择。
+- AM 元数据语言按用户要求固定简体中文（`apple-music.cjs` 的 `METADATA_LANGUAGE`），不因界面语言改变，也不因此更换账号 storefront；公开链接和账号歌单使用相同语言策略。

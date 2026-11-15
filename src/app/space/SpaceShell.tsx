@@ -22,6 +22,8 @@ import s from './SpaceShell.module.css';
 import { OnlineDialog, OnlineMusic } from '../ui/OnlineMusic';
 import { Button } from '../ui/kit';
 import { useOnlineSurface } from '../ui/OnlineSurface';
+import { dialogs } from '../actions/dialogs';
+import { DialogOwner } from '../ui/DialogOwner';
 import type { PlaylistSource } from './playlistRoom';
 import { tx } from '../../i18n';
 import { request } from '../online/state';
@@ -34,8 +36,23 @@ const FACES: [string, string][] = [
   ['tiempos', 'The Nave Crossing'],
 ];
 
+type SpaceView =
+  | null
+  | { kind: 'online' }
+  | { kind: 'settings'; section?: string }
+  | { kind: 'detail'; detail: NonNullable<Detail> }
+  | { kind: 'panel'; panel: NonNullable<Panel> };
 export function SpaceShell() {
-  const [onlineOpen, setOnlineOpen] = useState(false);
+  const [view, setView] = useState<SpaceView>(null);
+  const onlineOpen = view?.kind === 'online';
+  const cfg = view?.kind === 'settings' ? { open: true, section: view.section } : { open: false, section: undefined };
+  const panel = view?.kind === 'panel' ? view.panel : null;
+  const detail = view?.kind === 'detail' ? view.detail : null;
+  const openView = (next: SpaceView) => {
+    dialogs.dismiss('navigation');
+    setView(next);
+  };
+  const dialogOpen = useStore(ui, (state) => !!state.dialog);
   const [room, setRoom] = useState('gallery');
   const [playlistSource, setPlaylistSource] = useState<PlaylistSource>('local');
   const surface = useOnlineSurface();
@@ -61,11 +78,8 @@ export function SpaceShell() {
   }, [playlists]);
   const root = useRef<HTMLDivElement>(null),
     [ready, setReady] = useState(false),
-    [cfg, setCfg] = useState<{ open: boolean; section?: string }>({ open: false }),
     [gen, setGen] = useState(0),
-    [panel, setPanel] = useState<Panel>(null),
     [extra, setExtra] = useState<HTMLElement | null>(null),
-    [detail, setDetail] = useState<Detail>(null),
     [winHost, setWinHost] = useState<HTMLElement | null>(null);
   const world = useRef<ReturnType<typeof createWorld> | null>(null);
   const lang = useStore(langStore, (x) => x.lang),
@@ -98,18 +112,13 @@ export function SpaceShell() {
         roomChanged: setRoom,
         playlistSourceChanged: setPlaylistSource,
         openSettings: (section) => {
-          setPanel(null);
-          setDetail(null);
-          setCfg({ open: true, section });
+          openView({ kind: 'settings', section });
         },
         show: (d) => {
-          setDetail(d);
-          if (d) {
-            setPanel(null);
-            setCfg((c) => (c.open ? { open: false } : c));
-          }
+          if (d) openView({ kind: 'detail', detail: d });
+          else setView((v) => (v?.kind === 'detail' ? null : v));
         },
-        closeSettings: () => setCfg((c) => (c.open ? { open: false } : c)),
+        closeSettings: () => setView((v) => (v?.kind === 'settings' ? null : v)),
         menu: (d, x, y) => {
           const t = targetOf(d);
           if (!t) return world.current?.takePointer();
@@ -137,13 +146,14 @@ export function SpaceShell() {
     if (onlineOpen) document.exitPointerLock();
   }, [mini, away, gen, lang, ready, onlineOpen]);
   const close = () => {
-    setCfg({ open: false });
+    setView(null);
     world.current?.takePointer();
   };
   return (
     <div
       className={`space-root ${s.space}${cfg.open ? ' space-cfg' : ''}${lite ? ' space-lite' : ''}${mini ? ' space-mini' : ''}`}
       data-test="space"
+      inert={dialogOpen}
     >
       {/* a language change rebuilds the HUD and the scene's labels */}
       {ready && (
@@ -154,10 +164,14 @@ export function SpaceShell() {
           dangerouslySetInnerHTML={{ __html: hudHtml() }}
         />
       )}
-      {ready && cfg.open && <SpaceSettings section={cfg.section} onClose={close} />}
+      {ready && cfg.open && (
+        <DialogOwner>
+          <SpaceSettings section={cfg.section} onClose={close} />
+        </DialogOwner>
+      )}
       {ready && !mini && (
         <div className={s.onlineControl + ' ' + surface.className} data-test="space-online-control">
-          <Button className="card" onClick={() => setOnlineOpen(true)}>
+          <Button className="card" onClick={() => openView({ kind: 'online' })}>
             {tx('on.short')}
           </Button>
         </div>
@@ -175,7 +189,7 @@ export function SpaceShell() {
               key={source}
               aria-pressed={playlistSource === source}
               onClick={() => {
-                setDetail(null);
+                setView((v) => (v?.kind === 'detail' ? null : v));
                 world.current?.playlistSource(source);
               }}
             >
@@ -187,7 +201,7 @@ export function SpaceShell() {
         </div>
       )}
       {onlineOpen && (
-        <OnlineDialog title={tx('on.title')} close={() => setOnlineOpen(false)}>
+        <OnlineDialog title={tx('on.title')} close={() => setView(null)}>
           <OnlineMusic />
         </OnlineDialog>
       )}
@@ -196,28 +210,30 @@ export function SpaceShell() {
           host={extra}
           panel={panel}
           setPanel={(p) => {
-            if (p) {
-              setCfg({ open: false });
-              setDetail(null);
-            }
-            setPanel(p);
+            openView(p ? { kind: 'panel', panel: p } : null);
           }}
         />
       )}
       {ready && detail && (
-        <SpaceDetail
-          detail={detail}
-          onClose={() => {
-            setDetail(null);
-            world.current?.closed();
-          }}
-        />
+        <DialogOwner>
+          <SpaceDetail
+            detail={detail}
+            onClose={() => {
+              setView(null);
+              world.current?.closed();
+            }}
+          />
+        </DialogOwner>
       )}
       {ready && <ContextMenu />}
       {ready && <Toast />}
       {ready && <WinButtons host={winHost} />}
       {ready && mini && <MiniLyrics />}
-      {ready && !cfg.open && <SpacePanel panel={panel} onClose={() => setPanel(null)} />}
+      {ready && !cfg.open && (
+        <DialogOwner>
+          <SpacePanel panel={panel} onClose={() => setView(null)} />
+        </DialogOwner>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { tx } from '../../i18n';
 import { Lib, type Track, type MetaFound, type CoverFound } from '../bridge';
+import { DialogOwner } from '../ui/DialogOwner';
 import { ui, lib, useStore, fmtTime, toast, keep } from '../state';
 import { Button, IconButton, Seg, Cover, Badge, usePresence } from '../ui/kit';
 import { engine } from '../playback/stage';
@@ -88,18 +89,19 @@ export function ModalHost() {
     } as Record<string, (p: { m: any }) => React.ReactElement | null>
   )[cur.kind];
   return (
-    // (closing: the dialog and its scrim fade out quickly, nothing taking clicks meanwhile)
-    <div
-      className={s.scrim + ' ' + (ui.get().layer !== 'none' ? 'on-picture' : '')}
-      data-closing={closing || undefined}
-      onPointerDown={(e) => {
-        if (e.target === e.currentTarget && !exportBusy) close(null);
-      }}
-    >
-      <div data-test="modal" className={s.modal} role="dialog" aria-modal="true" data-kind={cur.kind}>
-        <Body m={cur} />
+    <DialogOwner>
+      <div
+        className={s.scrim + ' ' + (ui.get().layer !== 'none' ? 'on-picture' : '')}
+        data-closing={closing || undefined}
+        onPointerDown={(e) => {
+          if (e.target === e.currentTarget && !exportBusy) close(null);
+        }}
+      >
+        <div data-test="modal" className={s.modal} role="dialog" aria-modal="true" data-kind={cur.kind}>
+          <Body m={cur} />
+        </div>
       </div>
-    </div>
+    </DialogOwner>
   );
 }
 function NpModal({ m }: { m: { tab: string } }) {

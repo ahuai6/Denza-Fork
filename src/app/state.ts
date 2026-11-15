@@ -47,6 +47,7 @@ export const ui = createStore({
   /** full screen over the stage, the pointer still a while: the controls rest out of sight (Shell keeps it; the title
    *  bar, the play page and the player bar all read this one value) */
   idle: false,
+  dialog: null as string | null,
   modal: null as null | { kind: string; [k: string]: unknown },
   menu: null as null | { x: number; y: number; items: (MenuItem | '-')[] },
   toast: null as null | { text: string; id: number },
@@ -61,6 +62,8 @@ export const ui = createStore({
     font: string;
   },
 });
+export const modalOpen = (state = ui.get()) => !!state.modal || !!state.dialog;
+
 export const lib = createStore({
   ...({ folders: [], tracks: [], favorites: [], playlists: [] } as LibView),
   loaded: false,
