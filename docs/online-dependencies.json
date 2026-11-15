@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "dependencies": [
+    {
+      "id": "@neteasecloudmusicapienhanced/api",
+      "kind": "npm",
+      "source": "https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced",
+      "adapter": "electron/online/providers/netease.cjs"
+    },
+    {
+      "id": "@sansenjian/qq-music-api",
+      "kind": "npm",
+      "source": "https://github.com/sansenjian/qq-music-api",
+      "adapter": "electron/online/providers/qq.cjs"
+    },
+    {
+      "id": "kugoumusicapi",
+      "kind": "vendor",
+      "source": "https://github.com/MakcRe/KuGouMusicApi",
+      "adapter": "electron/online/providers/kugou.cjs",
+      "path": "vendor/kugou",
+      "sha256": "872528e40effad8926979f8700b33e301507f4d92ec941396b9b2cb5990424c0"
+    },
+    {
+      "id": "@openai/codex",
+      "kind": "npm",
+      "source": "https://github.com/openai/codex",
+      "adapter": "electron/translation-service.cjs"
+    },
+    {
+      "id": "apple-web",
+      "kind": "protocol",
+      "source": "https://developer.apple.com/documentation/applemusicapi",
+      "adapter": "electron/apple-music.cjs"
+    },
+    {
+      "id": "translation-http",
+      "kind": "protocol",
+      "source": "https://platform.openai.com/docs/api-reference",
+      "adapter": "electron/translation-service.cjs"
+    },
+    {
+      "id": "lyricsflow-file-service",
+      "kind": "protocol",
+      "source": "https://api.trylyricsflow.com/openapi.json",
+      "observedVersion": "2.0.0",
+      "adapter": "electron/online/lyricsflow-audio.cjs"
+    }
+  ]
+}

@@ -14,12 +14,14 @@ import { back } from '../layers';
 import { applyUiFont } from '../uifont';
 import { setSettings } from './settings';
 import { ws as workshop, engine as wsEngine } from '../workshop/project';
+import { bootOnline } from '../online/state';
 
 /** Start: `ready` is called once the settings and the library are in. Returns the cleanup (the live updates off). */
 export function boot(ready: () => void): () => void {
   if (!D || !Lib) return () => {};
   const d = D,
     l = Lib;
+  const offOnline = bootOnline();
   (async () => {
     const st = await d.settings();
     settings.set(st);
@@ -72,6 +74,7 @@ export function boot(ready: () => void): () => void {
     d.onWin((win) => ui.set({ win })),
   ];
   return () => {
+    offOnline();
     offs.forEach((f) => f());
     offW.forEach((f) => f());
   };

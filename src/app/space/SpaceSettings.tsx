@@ -10,11 +10,12 @@ import { readAllRhythmsAgain, clearStoredData, resetEverything } from '../action
 import { Button, Dropdown } from '../ui/kit';
 import { FontPicker } from '../ui/fonts';
 import { SettingField } from '../ui/SettingField';
+import { ForkNotice } from '../ui/ForkNotice';
 import type { SettingKey } from '../settings/schema';
 import { ts } from './i18n';
 import s from './SpaceSettings.module.css';
 
-export type SpaceSection = 'guide' | 'light' | 'audio' | 'lyrics' | 'look' | 'library' | 'data';
+export type SpaceSection = 'guide' | 'light' | 'audio' | 'lyrics' | 'look' | 'library' | 'data' | 'fork';
 
 const Group = ({ id, title, children }: { id: SpaceSection; title: string; children: ReactNode }) => (
   <section className={s.group} data-section={id}>
@@ -199,6 +200,9 @@ export function SpaceSettings({ section, onClose }: { section?: string; onClose:
               {tx('s.set.rescan')}
             </Button>
           </div>
+        </Group>
+        <Group id="fork" title={tx('on.forkTitle')}>
+          <ForkNotice />
         </Group>
         <Group id="data" title={tx('s.set.data')}>
           <p className={s.note}>{tx('s.set.dataHelp')}</p>

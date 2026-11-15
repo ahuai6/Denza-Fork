@@ -35,6 +35,7 @@ import { setSettings } from '../actions/settings';
 import s from './Effect.module.css';
 import { PerfHud } from './PerfHud';
 import { isTtml, ttmlToLrc } from '../../engine';
+import { TranslationEditor } from '../ui/TranslationEditor';
 
 const IDLE_MS = 2600;
 export function EffectView() {
@@ -410,6 +411,7 @@ function SpacingEditor() {
   );
 }
 export function LyricsTab() {
+  const [translating, setTranslating] = useState(false);
   const p = useStore(player),
     t = trackOf(p.shownId),
     session = p.session!,
@@ -421,6 +423,7 @@ export function LyricsTab() {
   const [busy, setBusy] = useState(false),
     [pick, setPick] = useState<number | null>(null),
     ta = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => setTranslating(false), [p.shownId]);
   // (TTML lyrics are edited as LRC: saved, the song reads its LRC from then on)
   useEffect(() => {
     const x = (player.get().hasLyrics ? player.get().session?.spec.lyrics : '') || '';
@@ -447,6 +450,9 @@ export function LyricsTab() {
     <>
       <div style={{ display: 'grid', gap: 8, padding: '6px 0 14px' }}>
         <Row>
+          <Button size="sm" disabled={!text.trim()} onClick={() => setTranslating(true)}>
+            {tx('tr.title')}
+          </Button>
           <b style={{ fontSize: 13 }}>{tx('s.lyr.edit')}</b>
           <span className="muted" style={{ fontSize: 12 }}>
             {tx(p.lyrics ? 's.lyr.source.' + p.lyrics.source : 's.lyr.source.none')}
@@ -498,6 +504,14 @@ export function LyricsTab() {
         />
       </div>
       {p.hasLyrics && <SpacingEditor />}
+      {translating && (
+        <TranslationEditor
+          source={text}
+          song={{ title: t?.title || '', artist: t?.artist || '', album: t?.album || '' }}
+          apply={setText}
+          close={() => setTranslating(false)}
+        />
+      )}
       <div style={{ display: 'grid', gap: 8 }}>
         <b style={{ fontSize: 13 }}>{tx('s.lyr.online')}</b>
         <form

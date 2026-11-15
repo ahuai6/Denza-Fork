@@ -20,6 +20,7 @@ const fs = require('node:fs');
 const library = require('./library.cjs');
 const audio = require('./audio.cjs');
 const inferHost = require('./inferHost.cjs');
+const onlineService = require('./online.cjs');
 
 app.setName('Cadenza');
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
@@ -49,7 +50,8 @@ let win = null,
   tray = null,
   quitting = false,
   hifi = null,
-  infer = null;
+  infer = null,
+  online = null;
 const allowed = new Set(); // paths the user chose in a save dialog during this session: the only ones we write
 const open = new Map();
 let nextId = 1;
@@ -372,6 +374,13 @@ app.on('second-instance', showWin);
 app.whenReady().then(async () => {
   applySettings();
   await library.start(ipcMain, () => win, settings);
+  try {
+    online = await onlineService.start(ipcMain, () => win, library);
+  } catch {
+    ipcMain.handle('online:request', () => {
+      throw Error('Online data could not be opened; the original data has been preserved.');
+    });
+  }
   hifi = audio.start(ipcMain, () => win, settings, library);
   infer = inferHost.start(ipcMain, () => win, settings);
   createWindow();
@@ -387,8 +396,14 @@ app.whenReady().then(async () => {
     }
   }
 });
-app.on('before-quit', () => {
+let onlineClosed = false;
+app.on('before-quit', (event) => {
   quitting = true;
+  if (online && !onlineClosed) {
+    event.preventDefault();
+    onlineClosed = true;
+    online.close().finally(() => app.quit());
+  }
 });
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => {

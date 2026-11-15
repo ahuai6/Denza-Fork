@@ -159,7 +159,12 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
         )}
         {view.list && !view.list.fav && (
           <>
-            <button type="button" className={s.ghost} onClick={() => setRename(view.title)}>
+            <button
+              type="button"
+              className={s.ghost}
+              disabled={!!playlists.find((p) => p.id === view.list?.id)?.remote}
+              onClick={() => setRename(view.title)}
+            >
               {tx('s.rename')}
             </button>
             <button
@@ -266,17 +271,19 @@ function AddTo({ ids, onDone }: { ids: string[]; onDone: () => void }) {
         </button>
       </form>
       <ul>
-        {playlists.map((p) => (
-          <li key={p.id}>
-            <button type="button" className={s.row} onClick={() => add(p.id, p.name)}>
-              <Icon n="lyrics" size={14} />
-              <span className={s.text}>
-                <b>{p.name}</b>
-                <small>{tx('s.tracks', { n: p.tracks.length })}</small>
-              </span>
-            </button>
-          </li>
-        ))}
+        {playlists
+          .filter((p) => !p.remote)
+          .map((p) => (
+            <li key={p.id}>
+              <button type="button" className={s.row} onClick={() => add(p.id, p.name)}>
+                <Icon n="lyrics" size={14} />
+                <span className={s.text}>
+                  <b>{p.name}</b>
+                  <small>{tx('s.tracks', { n: p.tracks.length })}</small>
+                </span>
+              </button>
+            </li>
+          ))}
       </ul>
     </div>
   );

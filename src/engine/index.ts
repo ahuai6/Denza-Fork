@@ -43,6 +43,16 @@ export {
 export { parseLyrics, CUE_SYMBOLS } from '../lyrics/parse';
 export { isTtml, ttmlToLrc } from '../lyrics/ttml';
 export { subLines, splitBrackets } from '../lyrics/subs';
+export {
+  translationLines,
+  translationLrc,
+  mergeTranslations,
+  readTranslationPaste,
+  matchTranslations,
+  type TranslationLine,
+  type TranslationFragment,
+  type TranslationMatch,
+} from '../lyrics/translation';
 export { autoSpacing, spacingKey, type Spacing } from '../lyrics/spacing';
 export { loadSegmenter } from '../text/segment';
 export type { Line as LyricLine } from '../lyrics/model';

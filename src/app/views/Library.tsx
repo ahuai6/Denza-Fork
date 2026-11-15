@@ -13,10 +13,12 @@ import { menuFor, run } from '../commands';
 import { askText } from './Modals';
 import { AlbumLine } from './AlbumLine';
 import s from './Library.module.css';
+import { OnlineMusic, SyncedPlaylists } from '../ui/OnlineMusic';
 
 export const SECTIONS: [string, string, string][] = [
   ['favorites', 's.favorites', 'heart'],
   ['playlists', 's.playlists', 'lyrics'],
+  ['online', 'on.title', 'search'],
   ['songs', 's.songs', 'note'],
   ['albums', 's.albums', 'disc'],
   ['artists', 's.artists', 'user'],
@@ -35,7 +37,6 @@ export function LibraryView() {
       .trim()
       .toLowerCase(),
     pls = useStore(lib, (x) => x.playlists);
-  if (loaded && !folders.length && !tracks.length) return <EmptyLibrary />;
   return (
     <div className={s.libWrap}>
       <Turn k={detail ? detail.kind + ':' + detail.key : 'list'}>
@@ -61,7 +62,9 @@ export function LibraryView() {
                 />
               )}
               {section === 'playlists' && <Playlists idx={idx} search={search} />}
-              {section === 'songs' && (
+              {section === 'online' && <OnlineMusic />}
+              {loaded && !folders.length && !tracks.length && section === 'songs' && <EmptyLibrary />}
+              {section === 'songs' && !(loaded && !folders.length && !tracks.length) && (
                 <Songs
                   tracks={tracks}
                   search={search}
@@ -422,35 +425,58 @@ function Favorites({ idx, search, kicker }: { idx: Idx; search: string; kicker: 
   );
 }
 function Playlists({ idx, search }: { idx: Idx; search: string }) {
-  const pls = useStore(lib, (x) => x.playlists).filter((p) => match(search, p.name));
+  const [tab, setTab] = useState('local');
+  const pls = useStore(lib, (x) => x.playlists).filter((p) => !p.remote && match(search, p.name));
   const create = async () => {
     const name = await askText(tx('s.newPlaylist'), tx('s.plName'), tx('s.untitledPl'));
     if (name != null) Lib!.playlist('create', name || tx('s.untitledPl'), []);
   };
   return (
-    <div className={s.cards + ' stagger'}>
-      <button type="button" className={s.card + ' ' + s.newCard} onClick={create}>
-        <span>
-          <Icon n="plus" size={30} />
-        </span>
-        <b>{tx('s.newPlaylist')}</b>
-      </button>
-      {pls.map((p, pi) => (
-        <div key={p.id} className={s.cardWrap} style={{ '--i': pi } as React.CSSProperties}>
-          <CardPlay ids={p.tracks} />
-          <button
-            type="button"
-            className={s.card}
-            onClick={() => ui.set({ detail: { kind: 'playlist', key: p.id } })}
-            onContextMenu={(e) => openMenu(e, menuFor({ kind: 'playlist', id: p.id, name: p.name, ids: p.tracks }))}
-          >
-            <Mosaic keys={p.tracks.map((id) => idx.byId.get(id)?.cover || null)} />
-            <b>{p.name}</b>
-            <small>{tx('s.tracks', { n: p.tracks.length })}</small>
+    <>
+      <div className={s.tools}>
+        <Button
+          kind={tab === 'local' ? 'primary' : 'quiet'}
+          aria-pressed={tab === 'local'}
+          onClick={() => setTab('local')}
+        >
+          {tx('on.local')}
+        </Button>
+        <Button
+          kind={tab === 'synced' ? 'primary' : 'quiet'}
+          aria-pressed={tab === 'synced'}
+          onClick={() => setTab('synced')}
+        >
+          {tx('on.synced')}
+        </Button>
+      </div>
+      {tab === 'synced' ? (
+        <SyncedPlaylists />
+      ) : (
+        <div className={s.cards + ' stagger'}>
+          <button type="button" className={s.card + ' ' + s.newCard} onClick={create}>
+            <span>
+              <Icon n="plus" size={30} />
+            </span>
+            <b>{tx('s.newPlaylist')}</b>
           </button>
+          {pls.map((p, pi) => (
+            <div key={p.id} className={s.cardWrap} style={{ '--i': pi } as React.CSSProperties}>
+              <CardPlay ids={p.tracks} />
+              <button
+                type="button"
+                className={s.card}
+                onClick={() => ui.set({ detail: { kind: 'playlist', key: p.id } })}
+                onContextMenu={(e) => openMenu(e, menuFor({ kind: 'playlist', id: p.id, name: p.name, ids: p.tracks }))}
+              >
+                <Mosaic keys={p.tracks.map((id) => idx.byId.get(id)?.cover || null)} />
+                <b>{p.name}</b>
+                <small>{tx('s.tracks', { n: p.tracks.length })}</small>
+              </button>
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
+      )}
+    </>
   );
 }
 

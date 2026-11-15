@@ -1,0 +1,57 @@
+[
+  {
+    "id": "netease",
+    "label": "网易云音乐",
+    "login": "qr",
+    "download": true,
+    "lyrics": true,
+    "remotePlayback": false,
+    "loginLabel": "on.signin",
+    "accountHelp": "on.accountHelp",
+    "syncHelp": "on.syncHelp",
+    "credentialImport": true
+  },
+  {
+    "id": "qq",
+    "label": "QQ Music",
+    "login": "qr",
+    "download": true,
+    "lyrics": true,
+    "remotePlayback": false,
+    "loginLabel": "on.signin",
+    "accountHelp": "on.accountHelp",
+    "syncHelp": "on.syncHelp",
+    "credentialImport": true
+  },
+  {
+    "id": "kugou",
+    "label": "酷狗音乐",
+    "login": "qr",
+    "download": true,
+    "lyrics": true,
+    "remotePlayback": false,
+    "loginLabel": "on.signin",
+    "accountHelp": "on.accountHelp",
+    "syncHelp": "on.syncHelp",
+    "credentialImport": true
+  },
+  {
+    "id": "apple",
+    "label": "Apple Music",
+    "login": "browser",
+    "download": true,
+    "lyrics": false,
+    "remotePlayback": true,
+    "loginLabel": "on.appleSignin",
+    "accountHelp": "on.appleHelp",
+    "syncHelp": "on.appleSyncHelp",
+    "playbackHelp": "on.appleServiceHelp",
+    "credentialImport": false,
+    "qualityLabels": {
+      "standard": "on.mp3",
+      "high": "on.aac",
+      "lossless": "on.flac",
+      "hires": "on.alac"
+    }
+  }
+]

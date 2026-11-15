@@ -56,3 +56,13 @@ Cadenza 以 **GNU Affero General Public License v3.0**（AGPL-3.0-only）發佈�
 | `htdemucs.onnx` | HTDemucs（四聲部，FP16 權重） | MIT，Copyright (c) Meta Platforms, Inc. and affiliates. | https://huggingface.co/StemSplitio/htdemucs-onnx（MIT） |
 
 執行環境 [ONNX Runtime](https://github.com/microsoft/onnxruntime)（`onnxruntime-node`，MIT，Copyright (c) Microsoft Corporation）隨桌面版附帶，Windows 版包含 DirectML（MIT，Copyright (c) Microsoft Corporation）。
+
+## Denza-Fork online services
+
+Music platform protocol libraries: `@neteasecloudmusicapienhanced/api`, `@sansenjian/qq-music-api`, and KuGouMusicApi (MIT). The KuGouMusicApi 1.6.3 source snapshot is retained under `vendor/kugou`, including its license, from the same snapshot used by ahuai6/Sonora at 904f36081eda380b52bed1ddf2346387e1bc207f. It is used as a library, without starting its HTTP server.
+
+QR images use `qrcode` (MIT). Codex OAuth and text generation use the official `@openai/codex` runtime (Apache-2.0); its license is retained as `licenses/OpenAI-Codex.txt`. No Sonora or SyncC UI, player or audio-container implementation is embedded in this application.
+
+Apple Music account/catalog behavior in `electron/apple-music.cjs` is rewritten with reference to the user's supplied LyricsFlow Downloader 1.3.0 source (declared MIT in its package metadata). Its UI, player, audio download/decryption backend and tagging pipeline are not embedded. Apple Music is a trademark of Apple Inc.; this application is not affiliated with Apple.
+
+AM file downloads additionally use the public HTTP service documented at https://api.trylyricsflow.com/openapi.json (observed API 2.0.0). Denza-Fork implements only request construction, streaming file transfer, format verification and library integration; it does not embed the service backend, audio decryption algorithms or keys. This service dependency is maintained independently of the LyricsFlow Downloader application.

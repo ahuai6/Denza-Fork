@@ -479,6 +479,7 @@ async function scan() {
       const live = new Set(Object.keys(db.tracks));
       db.favorites = db.favorites.filter((id) => live.has(id));
       for (const pl of db.playlists) pl.tracks = pl.tracks.filter((id) => live.has(id));
+      onlineLibrary.linkSyncedPlaylists();
       changed();
       send('lib:progress', { phase: 'idle', done: files.length, total: files.length });
       send('lib:wake');
@@ -1239,6 +1240,7 @@ function register(ipcMain, getWin) {
     }
     const p = db.playlists.find((x) => x.id === a);
     if (!p) return false;
+    if (p.remote && op !== 'delete') return false;
     if (op === 'rename') p.name = String(b || '').slice(0, 80) || p.name;
     else if (op === 'delete') db.playlists = db.playlists.filter((x) => x !== p);
     else if (op === 'add') {
@@ -1360,9 +1362,21 @@ const pathOf = (id) => {
   const t = db.tracks[id];
   return t && !t.protected ? t.path : null;
 };
+const onlineLibrary = require('./online/library-links.cjs').createLibraryIntegration({
+  getDB: () => db,
+  trackView,
+  scan,
+  watchAll,
+  changed,
+  view,
+});
 module.exports = {
   start,
   pathOf,
+  importDownload: onlineLibrary.importDownload,
+  syncPlaylists: onlineLibrary.syncPlaylists,
+  remoteSong: onlineLibrary.remoteSong,
+  remotePlaylist: onlineLibrary.remotePlaylist,
   scheme: {
     scheme: 'cadenza',
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true },
