@@ -116,10 +116,10 @@
 
 ---
 
-## 本轮接手交接：3.2.9-denza.7（UX 修复 / 优雅动效 / 空间光影 / 聆听室 5.1 / 2D-3D 管线优化）
+## 本轮接手交接：3.2.9-denza.7 / 3.2.9-denza.8（UX 修复 / 优雅动效 / 空间光影与马赛克叠层 / 聆听室 5.1 / 2D-3D 管线优化）
 
-- **基线与提交链路**：基于 `custom`（`9289eb5`），功能提交 `d31d86b`（`feat/ux-atmosphere-motion-perf`），合并至 `custom` 提交 `aa77a6aa27f3d20b635dce3234fba4d0f086ec4e`。
-- **Windows CI 构建**：[工作流 43917867943](https://github.com/ahuai6/Denza-Fork/actions/runs/43917867943)（产物 [14254301476](https://github.com/ahuai6/Denza-Fork/actions/runs/43917867943/artifacts/14254301476)）：43 文件 / 447 项单元测试全绿，安装版 `Cadenza-Setup-3.2.9-denza.7.exe` `455.95 MB`、便携版 `Cadenza-3.2.9-denza.7-portable.exe` `425.10 MB`，`app.asar` `175.18 MB`、`app.asar.unpacked` `430.46 MB`，`packaged-smoke.cjs` 通过（9 models; no account sign-in）。
+- **基线与提交链路**：基于 `custom`（`9289eb5`），首轮合并提交 `aa77a6a`（`3.2.9-denza.7`），复查空间下拉框马赛克与色调映射后提交 `133b61233bb9c0198d7e1e3af9b1b69f038870fe`（`3.2.9-denza.8`）。
+- **Windows CI 构建**：[工作流 43930367681](https://github.com/ahuai6/Denza-Fork/actions/runs/43930367681)（产物 [14259716923](https://github.com/ahuai6/Denza-Fork/actions/runs/43930367681/artifacts/14259716923)）：43 文件 / 447 项单元测试全绿，安装版 `Cadenza-Setup-3.2.9-denza.8.exe` `455.95 MB`、便携版 `Cadenza-3.2.9-denza.8-portable.exe` `425.00 MB`，`app.asar` `175.18 MB`、`app.asar.unpacked` `430.46 MB`，`packaged-smoke.cjs` 通过（9 models; no account sign-in）。
 
 ### 涉及文件与关键改动详表
 

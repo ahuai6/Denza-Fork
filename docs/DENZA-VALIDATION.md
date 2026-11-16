@@ -163,3 +163,9 @@
   4. 进一步提升空间直射阳光、环境阴影与光束增益对比度，并在 `OnlineDialog` 退场期补充 `inert` 与 `aria-hidden`。
 - 使用真实 Electron 重新截取并核验 `s1-space-home.png`、`s2-space-online-dd.png`（在线音乐平台下拉框）与 `s3-space-settings-dd.png`（空间设置滚动并展开字体下拉框）：确认下拉框内部与设置面板亮部均呈现清晰 WebGL 马赛克方块与单层白边，底层输入框与设置文字在下拉框区域内完全镂空不互串，无父层白线横穿下拉框。
 - 全量 43 个文件 / 447 项单元测试、类型检查、`online:deps:check`、`build:app` 与 `vite build --mode web` 重新通过；未覆盖边界同上。
+
+### 3.2.9-denza.8 Windows 最终构建
+
+- [工作流 43930367681](https://github.com/ahuai6/Denza-Fork/actions/runs/43930367681) 对 `custom` 提交 `133b61233bb9c0198d7e1e3af9b1b69f038870fe` 全部通过：43 个文件、447 项全量单元测试、类型检查、应用构建、模型资源拉取、`cadenza-audio.exe` 原生音频引擎、安装版（`Cadenza-Setup-3.2.9-denza.8.exe` `455.95 MB`）/便携版（`Cadenza-3.2.9-denza.8-portable.exe` `425.00 MB`，`resources/app.asar` `175.18 MB`、`app.asar.unpacked` `430.46 MB`）打包及 `scripts/packaged-smoke.cjs`（`Packaged modules and text runtime passed (9 models; no account sign-in)`）检查。
+- [构建产物 14259716923](https://github.com/ahuai6/Denza-Fork/actions/runs/43930367681/artifacts/14259716923) 包含安装版、便携版与 `SHA256SUMS.txt`。构建完成后仅补充验证与交接文档（`docs/**`），不修改应用运行代码；发布工作流再次校验提交已合并、运行/构建输入一致及资产 SHA256。
+- 完整经典/空间图形回归未在本次自动化构建中执行，以及真实在线账号、实体显示卡与 Windows 实机音频未实测的限制继续保留。
