@@ -129,4 +129,10 @@
 
 - 类型检查、`online-deps`、全量单元测试（42 个文件、444 项测试）、`build:app` 与 `vite build --mode web` 本地通过；新增 Apple Music Token 复用、SDK Worker 复用与中止、同步歌单分片迁移与分片清理、封面 LRU 复用与增量进度、CPU `runPercussiveEnergyCpu` 与 QQ 歌词直查快路径单测。
 - 本地运行 `scripts/perf-bench.mjs`（见 `docs/DENZA-OPTIMIZATION-HANDOFF.md`）量化对比 Before/After，并使用 Electron 校验 `dist-app/index.html` 在经典/空间界面下的异步分块加载（无控制台错误、无加载失败），以及本地 `electron-builder --win --x64 --dir` 解包后 `Cadenza.exe`（`ELECTRON_RUN_AS_NODE=1`）核心模块与 Codex 文本运行时检查（9 个模型，无账号登录）。
-- 说明：因本地分支在 Windows `core.autocrlf=true` 下存在 320 个未改动文件的行尾提示，格式化校验仅对本次修改文件（`--end-of-line auto`）执行并修复；本地未安装 `cargo` 与 `playwright`，因此完整经典/空间图形端到端回归（`tests/desktop.cjs`、`tests/space.cjs`、`tests/online-desktop.cjs`）、实体显示卡/Windows 音频及真实在线音乐/Codex 登录账号均未验证，不宣称为通过。Windows 安装包/便携版及 `scripts/packaged-smoke.cjs` 由 GitHub Actions（`denza-build.yml`）补充验证并回填记录。
+- 说明：因本地分支在 Windows `core.autocrlf=true` 下存在 320 个未改动文件的行尾提示，格式化校验仅对本次修改文件（`--end-of-line auto`）执行并修复；本地未安装 `cargo` 与 `playwright`，因此完整经典/空间图形端到端回归（`tests/desktop.cjs`、`tests/space.cjs`、`tests/online-desktop.cjs`）、实体显示卡/Windows 音频及真实在线音乐/Codex 登录账号均未验证，不宣称为通过。Windows 安装包/便携版及 `scripts/packaged-smoke.cjs` 由 GitHub Actions（`denza-build.yml`）补充验证并回填记录如下。
+
+### 3.2.9-denza.6 Windows 最终构建
+
+- [工作流 43893899000](https://github.com/ahuai6/Denza-Fork/actions/runs/43893899000) 对 `custom` 合并提交 `f15fc03bb69da2b90e4b7275b7b050045c444305` 全部通过：42 个文件、444 项全量单元测试、类型检查、应用构建、模型资源拉取、`cadenza-audio.exe` 原生音频引擎、安装版（`Cadenza-Setup-3.2.9-denza.6.exe` `455.95 MB`，较 `denza.5` 的 `505.51 MB` 减少 `49.56 MB`）/便携版（`Cadenza-3.2.9-denza.6-portable.exe` `425.01 MB`，较 `denza.5` 的 `466.59 MB` 减少 `41.58 MB`）打包及 `scripts/packaged-smoke.cjs`（`Packaged modules and text runtime passed (9 models; no account sign-in)`）检查。
+- [构建产物 14237804350](https://github.com/ahuai6/Denza-Fork/actions/runs/43893899000/artifacts/14237804350) 包含安装版、便携版与 `SHA256SUMS.txt`。构建完成后仅补充验证与交接文档，不修改应用运行代码；发布工作流再次校验提交已合并、运行/构建输入一致及资产 SHA256。
+- 完整经典/空间图形回归未在本次自动化构建中执行，以及真实在线账号、实体显示卡与 Windows 实机音频未实测的限制继续保留。

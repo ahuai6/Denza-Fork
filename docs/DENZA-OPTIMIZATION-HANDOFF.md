@@ -8,7 +8,7 @@
 
 - **基线起点（`custom` 分支）**：`0a4eb4b57a242432b5b3c96b013f8129d33fb0e1`（Merge PR #8, `3.2.9-denza.5`）
 - **基线文档锁定 Commit**：`8789cb6`（`docs: record performance audit baseline and handoff policy`，提交既有 `AGENTS.md` 与 `DENZA-PERFORMANCE-AUDIT.md`）
-- **优化开发分支**：`feat/perf-arch-optimization`（版本号升级为 `3.2.9-denza.6`，完成后并入 `custom`）
+- **优化开发与合并 Commit**：功能提交 `67b3112`（分支 `feat/perf-arch-optimization`，版本号 `3.2.9-denza.6`），已合并至 `custom` 节点 `f15fc03bb69da2b90e4b7275b7b050045c444305`（已通过 CI Run `43893899000` 全量打包与冒烟验证）
 
 | 阶段 | 文件 | 关键符号 / 改动摘要 |
 | --- | --- | --- |
@@ -76,8 +76,10 @@
 | 打包 `resources/app.asar` 体积 | `201.64 MB` | `175.17 MB` | **-26.47 MB（-13.1%）** |
 | 打包 `resources/app.asar.unpacked` 体积 | `556.96 MB` | `430.46 MB` | **-126.50 MB（-22.7%）** |
 | 解包核心资源合计（`app.asar + unpacked`） | `758.60 MB` | `605.63 MB` | **-152.97 MB（-20.2%）** |
+| Windows 安装包（`Cadenza-Setup-*.exe`） | `505.51 MB`（`denza.5`, 530,070,800 B） | `455.95 MB`（`denza.6`, CI Run `43893899000`） | **-49.56 MB（-9.8%）** |
+| Windows 便携版（`Cadenza-*-portable.exe`） | `466.59 MB`（`denza.5`, 489,256,644 B） | `425.01 MB`（`denza.6`, CI Run `43893899000`） | **-41.58 MB（-8.9%）** |
 
-> 说明：Windows `.exe` 安装包（`Cadenza-Setup-3.2.9-denza.6.exe`）与便携版（`Cadenza-3.2.9-denza.6-portable.exe`）最终体积将在 GitHub Actions（`denza-build.yml`）完成后追加记录。
+> CI Run [43893899000](https://github.com/ahuai6/Denza-Fork/actions/runs/43893899000)（Artifact ID：`14237804350`）另打包固定模型目录 `resources/models`（`126.78 MB`），并执行 `scripts/packaged-smoke.cjs` 通过（`Packaged modules and text runtime passed (9 models; no account sign-in)`）。
 
 ---
 
@@ -93,8 +95,8 @@
 7. 增量 Prettier 检查（`npx prettier --write --end-of-line crlf` 仅作用于本次改动中提示格式不一致的 11 个文件，因 Windows `core.autocrlf=true` 会对仓库未改动文件报 CRLF 差异故未执行全局 `--write`）。
 
 ### 未覆盖 / 跳过说明（绝不虚报）
-- **原生 Rust 引擎（`cadenza-audio.exe`）与最终 Windows 安装包**：本机未安装 `cargo`，原生编译与安装器打包交由 GitHub Actions `.github/workflows/denza-build.yml` 与 `scripts/packaged-smoke.cjs` 执行并回填。
-- **完整图形 E2E 回归**：本机无 `playwright` 依赖与完整端到端缓存（`tests/desktop.cjs`、`tests/space.cjs`、`tests/online-desktop.cjs`、`tests/desktop-hifi.cjs`、`tests/render.cjs`、`tests/neural.cjs` 均未运行）。
+- **GitHub Actions Windows CI（已补全打包构建与冒烟）**：[工作流 43893899000](https://github.com/ahuai6/Denza-Fork/actions/runs/43893899000) 已于合并提交 `f15fc03bb69da2b90e4b7275b7b050045c444305` 通过 `tsc` + `vitest`（42 文件 / 444 测试）+ `build:app` + `scripts/models.mjs` + `cargo build`（`cadenza-audio.exe`）+ `electron-builder` 安装版/便携版打包 + `scripts/packaged-smoke.cjs`（9 个模型）。本机因未装 `cargo` 未在本地编原生 Rust 二进制。
+- **完整图形 E2E 回归**：本机无 `playwright` 依赖与完整端到端缓存（`tests/desktop.cjs`、`tests/space.cjs`、`tests/online-desktop.cjs`、`tests/desktop-hifi.cjs`、`tests/render.cjs`、`tests/neural.cjs`），CI 流水线也未包含图形 E2E，均未运行。
 - **真实在线账号与实体音频硬件**：未执行真实网易云/QQ/酷狗/Apple Music 账号登录、真实网络拉歌与实体 WASAPI/Hi-Fi 声卡播放实测。
 
 ---
