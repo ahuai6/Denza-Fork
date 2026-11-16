@@ -86,6 +86,62 @@ export interface PercussiveEnergyFrames {
 
 const pipelines = new WeakMap<GPUDevice, GPUComputePipeline>();
 
+const TAPS_JS = 17,
+  HALF_JS = 8;
+
+function median17(buf: Float32Array): number {
+  for (let i = 1; i < TAPS_JS; i++) {
+    const v = buf[i];
+    let j = i - 1;
+    while (j >= 0 && buf[j] > v) {
+      buf[j + 1] = buf[j];
+      j--;
+    }
+    buf[j + 1] = v;
+  }
+  return buf[HALF_JS];
+}
+
+/** CPU reference HPSS matching `PERCUSSIVE_WGSL` so Native ONNX mode needs no WebGPU device. */
+export function runPercussiveEnergyCpu(mel: Float32Array, frames: number): PercussiveEnergyFrames {
+  if (frames < 1 || mel.length < frames * MEL_BINS)
+    throw new Error(`percussive: ${mel.length} floats for ${frames} frames`);
+  const mag = new Float32Array(frames * MEL_BINS);
+  for (let i = 0; i < frames * MEL_BINS; i++) {
+    const v = mel[i];
+    mag[i] = v < 1e-3 ? Math.max(0, v + 0.5 * v * v) : Math.exp(v) - 1;
+  }
+  const percussive = new Float32Array(frames);
+  const total = new Float32Array(frames);
+  const taps = new Float32Array(TAPS_JS);
+  for (let frame = 0; frame < frames; frame++) {
+    let perc = 0,
+      tot = 0;
+    const rowBase = frame * MEL_BINS;
+    for (let band = 0; band < MEL_BINS; band++) {
+      for (let k = 0; k < TAPS_JS; k++) {
+        const f = frame + k - HALF_JS;
+        taps[k] = f >= 0 && f < frames ? mag[f * MEL_BINS + band] : 0;
+      }
+      const harmonic = median17(taps);
+      for (let k = 0; k < TAPS_JS; k++) {
+        const b = band + k - HALF_JS;
+        taps[k] = b >= 0 && b < MEL_BINS ? mag[rowBase + b] : 0;
+      }
+      const hit = median17(taps);
+      const val = mag[rowBase + band],
+        e = val * val,
+        hh = harmonic * harmonic,
+        pp = hit * hit;
+      if (hh + pp > 0) perc += (e * pp) / (hh + pp);
+      tot += e;
+    }
+    percussive[frame] = perc;
+    total[frame] = tot;
+  }
+  return { percussive, total };
+}
+
 /** The percussive and total energy of every frame of `mel` ([frames, 128], row-major). */
 export const runPercussiveEnergy = async (
   device: GPUDevice,

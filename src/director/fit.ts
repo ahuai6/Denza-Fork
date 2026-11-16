@@ -88,15 +88,51 @@ function fitPass(
   // (the whole song: the sung character needs holding wherever it is, the frames while they are up)
   const f0 = Math.max(0, Math.floor(Math.min(sung[0].w.t, ...frames.map((F) => F.ts)) * rate)),
     f1 = n - 1;
+  const frameQueue = frames
+    .filter((F) => !dropped.has(F))
+    .map((F) => ({ F, ts: F.ts, gone: frameGone(F) }))
+    .sort((a, b) => a.ts - b.ts);
+  const activeFrames: { F: Frame; ts: number; gone: number }[] = [];
+  let fqIdx = 0;
+  let sungIdx = 0;
   let worst = 0;
   for (let f = f0; f <= f1; f++) {
-    const t = f / rate,
-      act = frames.filter((F) => !dropped.has(F) && t >= F.ts && t < frameGone(F));
+    const t = f / rate;
+    while (fqIdx < frameQueue.length && frameQueue[fqIdx].ts <= t) {
+      const item = frameQueue[fqIdx++];
+      if (!dropped.has(item.F) && t < item.gone) activeFrames.push(item);
+    }
+    for (let i = activeFrames.length - 1; i >= 0; i--) {
+      const item = activeFrames[i];
+      if (dropped.has(item.F) || t >= item.gone) activeFrames.splice(i, 1);
+    }
+    const act = activeFrames.map((item) => item.F);
     // (the word being sung — not in its last moment, its sustain, where the camera may already be on to the next — nor
     // once its line has left the page)
-    const S0 = sweeps.some(([a, b]) => t >= a && t < b)
-      ? undefined
-      : sung.find((S) => t >= S.w.t + 0.03 && t < S.end - 0.12 && t < S.line.secEnd);
+    let inSweep = false;
+    for (let i = 0; i < sweeps.length; i++) {
+      const sw = sweeps[i];
+      if (t >= sw[0] && t < sw[1]) {
+        inSweep = true;
+        break;
+      }
+    }
+    let S0: PWord | undefined;
+    if (!inSweep) {
+      while (sungIdx < sung.length) {
+        const w = sung[sungIdx];
+        if (t < w.end - 0.12 && t < w.line.secEnd) break;
+        sungIdx++;
+      }
+      for (let i = sungIdx; i < sung.length; i++) {
+        const w = sung[i];
+        if (w.w.t + 0.03 > t) break;
+        if (t < w.end - 0.12 && t < w.line.secEnd) {
+          S0 = w;
+          break;
+        }
+      }
+    }
     if (!act.length && !S0) continue;
     const cam = { x: P.x[f], y: P.y[f], z: Math.exp(P.lz[f]), r: P.r[f], d: P.d[f], yaw: 0, pitch: 0 };
     const fit = (fs: Frame[]) => {

@@ -66,18 +66,7 @@ module.exports = ({ call, json }) => ({
     };
   },
   async lyrics(track, signal) {
-    let b;
-    try {
-      b = await call(
-        'getLyric',
-        { songmid: track.id, songid: track.lyricId, isFormat: false, trans: 1, roma: 1 },
-        signal,
-      );
-    } catch (error) {
-      signal?.throwIfAborted();
-      if (!json) throw error;
-      b = {};
-    }
+    let decoded = {};
     if (json) {
       try {
         const body = await json('https://u.y.qq.com/cgi-bin/musicu.fcg', {
@@ -106,21 +95,34 @@ module.exports = ({ call, json }) => ({
         });
         const extra = body.req_0?.data;
         if (extra) {
-          const decoded = Object.fromEntries(
+          decoded = Object.fromEntries(
             ['lyric', 'trans', 'roma']
               .map((key) => [key, qrcLrc(decodeOnlineLyric(extra[key]))])
               .filter(([, value]) => value),
           );
-          b = { ...b, ...decoded };
         }
       } catch {
         signal?.throwIfAborted();
       }
     }
+    let b = {};
+    if (!decoded.lyric) {
+      try {
+        b = await call(
+          'getLyric',
+          { songmid: track.id, songid: track.lyricId, isFormat: false, trans: 1, roma: 1 },
+          signal,
+        );
+      } catch (error) {
+        signal?.throwIfAborted();
+        if (!json) throw error;
+      }
+    }
+    const merged = { ...b, ...decoded };
     return {
-      original: decodeText(first(b, ['lyric', 'data.lyric'])),
-      translation: decodeText(first(b, ['trans', 'translyric', 'data.trans'])),
-      pronunciation: decodeText(first(b, ['roma', 'romalrc', 'data.roma'])),
+      original: decodeText(first(merged, ['lyric', 'data.lyric'])),
+      translation: decodeText(first(merged, ['trans', 'translyric', 'data.trans'])),
+      pronunciation: decodeText(first(merged, ['roma', 'romalrc', 'data.roma'])),
     };
   },
 });

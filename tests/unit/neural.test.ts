@@ -13,6 +13,7 @@ import {
   HTDEMUCS_SEGMENT,
 } from '../../src/rhythm/neural/drums';
 import { MEL_BANDS, BEAT_THIS_FPS, melBandCentresHz, melSpectrogram } from '../../src/rhythm/neural/mel';
+import { runPercussiveEnergyCpu } from '../../src/rhythm/neural/wgsl/percussive';
 import { unpackWeights } from '../../src/rhythm/neural/weights';
 import { barIndexer } from '../../src/rhythm/bars';
 import { analyze } from '../../src/rhythm/analyze';
@@ -262,5 +263,36 @@ describe('one interface: a neural reading becomes the same RhythmAnalysis', () =
     const g = new Signals(new RhythmMap(a)).grooveHits();
     expect(g.filter((h) => h.t < 7.8).length).toBe(0);
     expect(g.filter((h) => h.t > 8).length).toBeGreaterThan(30);
+  });
+
+  it('runPercussiveEnergyCpu separates broadband transients from steady harmonic bands', () => {
+    const frames = 24;
+    const mel = new Float32Array(frames * MEL_BANDS);
+    // Steady harmonic tone across all frames on two bands.
+    for (let f = 0; f < frames; f++) {
+      mel[f * MEL_BANDS + 20] = 2.0;
+      mel[f * MEL_BANDS + 40] = 1.5;
+    }
+    // Broadband transient hit on a single frame.
+    const hitFrame = 12;
+    for (let b = 0; b < MEL_BANDS; b++) {
+      mel[hitFrame * MEL_BANDS + b] = 2.5;
+    }
+
+    const { percussive, total } = runPercussiveEnergyCpu(mel, frames);
+    expect(percussive.length).toBe(frames);
+    expect(total.length).toBe(frames);
+    for (let f = 0; f < frames; f++) {
+      expect(Number.isFinite(percussive[f])).toBe(true);
+      expect(Number.isFinite(total[f])).toBe(true);
+      expect(percussive[f]).toBeGreaterThanOrEqual(0);
+      expect(percussive[f]).toBeLessThanOrEqual(total[f] + 1e-4);
+    }
+
+    const steadyRatio = percussive[4] / total[4];
+    const hitRatio = percussive[hitFrame] / total[hitFrame];
+    expect(hitRatio).toBeGreaterThan(0.8);
+    expect(steadyRatio).toBeLessThan(0.2);
+    expect(() => runPercussiveEnergyCpu(mel, 0)).toThrow();
   });
 });

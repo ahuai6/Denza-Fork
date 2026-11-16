@@ -2,7 +2,7 @@
 // engine's (the hand-over from the now-playing page); these controls appear as it lands. The bottom bar rises whenever
 // the pointer moves and sinks after a still moment; the pointer itself hides with it and comes back on any movement.
 // The song's own settings slide in from the right edge.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { tx } from '../../i18n';
 import { D, Lib } from '../bridge';
 import { ui, settings, useStore, modalOpen, trackOf, toast, openMenu } from '../state';
@@ -35,9 +35,12 @@ import { setSettings } from '../actions/settings';
 import s from './Effect.module.css';
 import { PerfHud } from './PerfHud';
 import { isTtml, ttmlToLrc } from '../../engine';
-import { OnlineLyricsSearch } from '../ui/OnlineLyricsSearch';
 import { DialogOwner } from '../ui/DialogOwner';
-import { TranslationEditor } from '../ui/TranslationEditor';
+
+const OnlineLyricsSearch = lazy(() =>
+  import('../ui/OnlineLyricsSearch').then((m) => ({ default: m.OnlineLyricsSearch })),
+);
+const TranslationEditor = lazy(() => import('../ui/TranslationEditor').then((m) => ({ default: m.TranslationEditor })));
 
 const IDLE_MS = 2600;
 export function EffectView() {
@@ -496,20 +499,24 @@ export function LyricsTab() {
       </div>
       {p.hasLyrics && <SpacingEditor />}
       {translating && (
-        <TranslationEditor
-          source={text}
-          song={{ title: t?.title || '', artist: t?.artist || '', album: t?.album || '' }}
-          apply={setText}
-          close={() => setTranslating(false)}
-        />
+        <Suspense fallback={null}>
+          <TranslationEditor
+            source={text}
+            song={{ title: t?.title || '', artist: t?.artist || '', album: t?.album || '' }}
+            apply={setText}
+            close={() => setTranslating(false)}
+          />
+        </Suspense>
       )}
       <div style={{ display: 'grid', gap: 8 }}>
         <b style={{ fontSize: 13 }}>{tx('s.lyr.online')}</b>
-        <OnlineLyricsSearch
-          key={p.shownId}
-          song={{ title: t?.title || '', artist: t?.artist || '', album: t?.album || '', duration: t?.duration }}
-          apply={(value) => use(isTtml(value) || hasTimedLines(value) ? value : spreadPlain(value, end))}
-        />
+        <Suspense fallback={null}>
+          <OnlineLyricsSearch
+            key={p.shownId}
+            song={{ title: t?.title || '', artist: t?.artist || '', album: t?.album || '', duration: t?.duration }}
+            apply={(value) => use(isTtml(value) || hasTimedLines(value) ? value : spreadPlain(value, end))}
+          />
+        </Suspense>
       </div>
     </>
   );

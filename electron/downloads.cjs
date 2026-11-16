@@ -1,11 +1,16 @@
-const { writeDownloadTags, verifyLyrics, nativeTtml } = require('./online/tags.cjs');
+const { Worker } = require('node:worker_threads');
+const { nativeTtml } = require('./online/tags.cjs');
 const { fetchAudio } = require('./online/http-files.cjs');
 const { validateFormat } = require('./online/audio-validation.cjs');
+const { createArtworkCache } = require('./online/artwork.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID, createHash } = require('node:crypto');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
+
+const TAG_WORKER_SCRIPT = path.join(__dirname, 'online/tag-worker.cjs');
+const TAG_WORKER_IDLE_MS = 45000;
 
 const safeName = (s) =>
   String(s)
@@ -42,16 +47,112 @@ async function commit(temp, folder, name, ext, intent = async () => {}) {
   throw Error('Cannot reserve a file name');
 }
 class Downloads {
-  constructor(store, platforms, library, publish, fetcher = fetchAudio, artworkFetcher = fetch) {
-    Object.assign(this, { store, platforms, library, publish, fetcher, artworkFetcher });
+  constructor(
+    store,
+    platforms,
+    library,
+    publish,
+    fetcher = fetchAudio,
+    artworkFetcher = fetch,
+    publishProgress = null,
+  ) {
+    Object.assign(this, { store, platforms, library, publish, fetcher, artworkFetcher, publishProgress });
+    this.artworkCache = createArtworkCache({ fetcher: artworkFetcher });
     this.running = new Map();
     this.tasks = new Set();
     this.closed = false;
+    this.tagSlot = null;
+    this.nextTagId = 1;
     for (const j of store.data.jobs)
       if (['queued', 'resolving', 'downloading', 'saving'].includes(j.status)) j.status = 'paused';
   }
+  getTagSlot() {
+    if (this.tagSlot && !this.tagSlot.dead) {
+      if (this.tagSlot.idleTimer) {
+        clearTimeout(this.tagSlot.idleTimer);
+        this.tagSlot.idleTimer = null;
+      }
+      this.tagSlot.worker.ref();
+      return this.tagSlot;
+    }
+    const worker = new Worker(TAG_WORKER_SCRIPT, { stdout: true, stderr: true });
+    worker.stdout.resume();
+    worker.stderr.resume();
+    const slot = { worker, pending: new Map(), idleTimer: null, dead: false };
+    const teardown = (error) => {
+      if (slot.dead) return;
+      slot.dead = true;
+      if (slot.idleTimer) {
+        clearTimeout(slot.idleTimer);
+        slot.idleTimer = null;
+      }
+      if (this.tagSlot === slot) this.tagSlot = null;
+      for (const entry of [...slot.pending.values()]) entry.finish(error || Error('Tag worker stopped'));
+      slot.pending.clear();
+    };
+    worker.on('message', (msg) => {
+      if (!msg || typeof msg !== 'object') return;
+      const entry = slot.pending.get(msg.id);
+      if (!entry) return;
+      entry.finish(msg.error ? Error(msg.error) : null, msg);
+    });
+    worker.once('error', (error) => teardown(error));
+    worker.once('exit', () => teardown(Error('Tag worker stopped')));
+    this.tagSlot = slot;
+    return slot;
+  }
+  async closeTagWorker() {
+    const slot = this.tagSlot;
+    this.tagSlot = null;
+    if (!slot) return;
+    slot.dead = true;
+    if (slot.idleTimer) clearTimeout(slot.idleTimer);
+    for (const entry of [...slot.pending.values()]) entry.finish(Error('Tag worker closed'));
+    slot.pending.clear();
+    await slot.worker.terminate().catch(() => {});
+  }
+  runTagTask(payload, signal) {
+    signal?.throwIfAborted();
+    return new Promise((resolve, reject) => {
+      const slot = this.getTagSlot();
+      const id = this.nextTagId++;
+      let done = false;
+      const finish = (err, val) => {
+        if (done) return;
+        done = true;
+        signal?.removeEventListener('abort', abort);
+        slot.pending.delete(id);
+        if (slot.pending.size === 0 && !slot.dead) {
+          slot.worker.unref();
+          slot.idleTimer = setTimeout(() => {
+            if (slot.pending.size === 0) void this.closeTagWorker();
+          }, TAG_WORKER_IDLE_MS);
+          slot.idleTimer.unref?.();
+        }
+        err ? reject(err) : resolve(val);
+      };
+      const abort = () => finish(Error('Cancelled'));
+      slot.pending.set(id, { finish });
+      signal?.addEventListener('abort', abort, { once: true });
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      try {
+        slot.worker.postMessage({ id, ...payload });
+      } catch (error) {
+        finish(error);
+      }
+    });
+  }
   view() {
     return this.store.data.jobs.map(({ file, pending, folder, ...view }) => view);
+  }
+  saveState(immediate = false) {
+    if (!immediate && typeof this.store.scheduleSave === 'function') {
+      return this.store.scheduleSave(300);
+    }
+    return this.store.save();
   }
 
   async add(tracks, quality) {
@@ -80,7 +181,7 @@ class Downloads {
         total: 0,
       });
     }
-    await this.store.save();
+    await this.saveState(true);
     this.publish();
     this.pump();
     return this.view();
@@ -98,7 +199,7 @@ class Downloads {
     } else if (action === 'remove' && !this.running.has(id))
       this.store.data.jobs = this.store.data.jobs.filter((x) => x !== j);
     else throw Error('Task is still running');
-    await this.store.save();
+    await this.saveState(true);
     this.publish();
     this.pump();
     return this.view();
@@ -113,7 +214,7 @@ class Downloads {
       const task = this.run(job, controller).finally(async () => {
         this.running.delete(job.id);
         this.tasks.delete(task);
-        await this.store.save();
+        await this.saveState(false);
         this.publish();
         this.pump();
       });
@@ -198,7 +299,16 @@ class Downloads {
               if (head.length < 512) head = Buffer.concat([head, chunk]).subarray(0, 512);
               if (Date.now() - last > 350) {
                 last = Date.now();
-                this.publish();
+                if (this.publishProgress) {
+                  this.publishProgress({
+                    id: job.id,
+                    status: job.status,
+                    received: job.received,
+                    total: job.total,
+                  });
+                } else {
+                  this.publish();
+                }
               }
               next(null, chunk);
             },
@@ -259,70 +369,61 @@ class Downloads {
       const tagged = temp + '.' + ext;
       await fs.promises.rename(temp, tagged);
       temp = tagged;
-      let staged;
-      try {
-        let found, artwork;
-        const mode = job.lyricsMode || 'both';
-        if (mode !== 'none') {
-          try {
-            found = await this.platforms.lyrics(
-              job.track,
-              AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
-            );
-          } catch {
-            job.metadataWarning = 'Lyrics could not be fetched; audio has been retained';
-          }
+      let found, artwork;
+      const mode = job.lyricsMode || 'both';
+      if (mode !== 'none') {
+        try {
+          found = await this.platforms.lyrics(
+            job.track,
+            AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]),
+          );
+        } catch {
+          job.metadataWarning = 'Lyrics could not be fetched; audio has been retained';
         }
-        if (mode !== 'none' && !found) {
-          const embedded = nativeTtml(meta.native) || meta.common.lyrics?.[0]?.text;
-          if (embedded) {
-            found = { original: embedded, source: 'embedded' };
-            delete job.metadataWarning;
-          }
-        }
-        if (job.track.artworkUrl) {
-          try {
-            const response = await this.artworkFetcher(job.track.artworkUrl, {
-              signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)]),
-              credentials: 'omit',
-            });
-            if (!response.ok || !response.body) throw Error('Artwork unavailable');
-            const chunks = [];
-            let size = 0;
-            for await (const chunk of Readable.fromWeb(response.body)) {
-              size += chunk.length;
-              if (size > 8 * 1024 * 1024) throw Error('Artwork too large');
-              chunks.push(chunk);
-            }
-            artwork = Buffer.concat(chunks);
-          } catch {
-            /* Cover errors must not discard audio or lyric tags. */
-          }
-        }
-        staged = path.join(job.folder, `.denza-${job.id}.tags.${ext}`);
-        await fs.promises.copyFile(temp, staged, fs.constants.COPYFILE_EXCL);
-        job.lyrics = writeDownloadTags(staged, ext, job.track, found, mode, artwork);
-        const checked = await mm.parseFile(staged, { duration: true, skipCovers: true });
-        verifyLyrics(checked, job.lyrics);
-        if (!checked.format.duration || Math.abs(checked.format.duration - meta.format.duration) > 0.05)
-          throw Error('Tag validation failed');
-        await fs.promises.unlink(temp);
-        temp = staged;
-        staged = null;
-      } catch {
-        job.lyrics = { mode: job.lyricsMode || 'both', fields: [], status: 'unavailable' };
-        job.metadataWarning = 'Audio saved; metadata validation or writing failed';
-      } finally {
-        if (staged) await fs.promises.rm(staged, { force: true }).catch(() => {});
       }
-      const sha256 = await digest(temp);
+      if (mode !== 'none' && !found) {
+        const embedded = nativeTtml(meta.native) || meta.common.lyrics?.[0]?.text;
+        if (embedded) {
+          found = { original: embedded, source: 'embedded' };
+          delete job.metadataWarning;
+        }
+      }
+      if (job.track.artworkUrl) {
+        try {
+          artwork = await this.artworkCache.get(job.track.artworkUrl, controller.signal);
+        } catch {
+          /* Cover errors must not discard audio or lyric tags. */
+        }
+      }
+      const stagedPath = path.join(job.folder, `.denza-${job.id}.tags.${ext}`);
+      const tagResult = await this.runTagTask(
+        {
+          tempPath: temp,
+          stagedPath,
+          ext,
+          track: job.track,
+          found,
+          mode,
+          artwork,
+          expectedDuration: meta.format.duration,
+        },
+        controller.signal,
+      );
+      if (tagResult.ok) {
+        job.lyrics = tagResult.lyrics;
+        temp = tagResult.file;
+      } else {
+        job.lyrics = { mode, fields: [], status: 'unavailable' };
+        job.metadataWarning = 'Audio saved; metadata validation or writing failed';
+      }
+      const sha256 = tagResult.sha256;
       job.file = await commit(temp, job.folder, `${job.track.artist} - ${job.track.title}`, ext, async (file) => {
         job.pending = { file, sha256 };
-        await this.store.save();
+        await this.saveState(true);
       });
       delete job.pending;
       temp = null;
-      await this.store.save();
+      void this.saveState(false);
       await this.library.importDownload(job.file, job.track);
       job.status = 'completed';
     } catch (e) {
@@ -345,7 +446,10 @@ class Downloads {
       }
     }
     await Promise.allSettled([...this.tasks]);
-    await this.store.save();
+    await this.closeTagWorker();
+    this.artworkCache.clear();
+    if (typeof this.store.flush === 'function') await this.store.flush();
+    else await this.store.save();
   }
 }
 module.exports = { Downloads, audioExtension, commit };

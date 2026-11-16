@@ -2,7 +2,7 @@ import { DialogOwner } from '../ui/DialogOwner';
 // The desktop app, as a stage (docs/DESIGN.md): the playing song is the stage (the engine's picture and the play page);
 // the library, the poster wall, the workshop and the settings are pages on one sheet of paper that rises over it; the
 // player bar is the stage's apron, there in both; the title bar floats above everything with the places to go.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { tx, lang as langStore } from '../../i18n';
 import { D } from '../bridge';
 import { ui, lib, settings, useStore, modalOpen, keep, type Page } from '../state';
@@ -12,19 +12,20 @@ import { player } from '../playback/player';
 import { RHYTHM_VERSION } from '../../engine';
 import mark from '../brand/mark.svg';
 import { LibraryView } from './Library';
-import { PosterWall } from './Wall';
-import { SettingsView } from './Settings';
 import { boot, bindKeys, go } from '../actions/boot';
 import { PlayerCard, QueuePanel } from './Player';
 import { Stage, NowPlaying } from './NowPlaying';
 import { EffectView } from './Effect';
 import { ModalHost, askText, editMeta, exportTrack } from './Modals';
-import { WorkshopPage, sendToWorkshop } from './workshop/Workshop';
 import { setHost } from '../commands';
 import { Guard } from '../ui/Guard';
 import { refs, openNp } from '../layers';
 import { MiniLyrics } from '../ui/MiniLyrics';
 import s from './Shell.module.css';
+
+const PosterWall = lazy(() => import('./Wall').then((m) => ({ default: m.PosterWall })));
+const SettingsView = lazy(() => import('./Settings').then((m) => ({ default: m.SettingsView })));
+const WorkshopPage = lazy(() => import('./workshop/Workshop').then((m) => ({ default: m.WorkshopPage })));
 
 function resolveTheme(t: string) {
   return t === 'light' || t === 'dark' ? t : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -92,7 +93,13 @@ export function Shell() {
   useEffect(bindKeys, []);
   // (what this interface can do for the library's commands: ask a name, open the tag editor, the export, the workshop)
   useEffect(
-    () => setHost({ ask: askText, editTags: editMeta, exportVideo: exportTrack, toWorkshop: sendToWorkshop }),
+    () =>
+      setHost({
+        ask: askText,
+        editTags: editMeta,
+        exportVideo: exportTrack,
+        toWorkshop: (t) => void import('./workshop/Workshop').then((m) => m.sendToWorkshop(t)),
+      }),
     [],
   );
   // full screen over the picture: the window's buttons (leaving full screen) show only while the pointer moves, as the
@@ -153,10 +160,12 @@ export function Shell() {
         {/* a page turns: the old one fades out, the new one rises in */}
         <Turn k={page} className={s.pageInner} boxClassName={s.pageBox}>
           <Guard name="page" k={page}>
-            {page === 'library' && <LibraryView />}
-            {page === 'wall' && <PosterWall />}
-            {page === 'settings' && <SettingsView />}
-            {page === 'workshop' && <WorkshopPage />}
+            <Suspense fallback={null}>
+              {page === 'library' && <LibraryView />}
+              {page === 'wall' && <PosterWall />}
+              {page === 'settings' && <SettingsView />}
+              {page === 'workshop' && <WorkshopPage />}
+            </Suspense>
           </Guard>
         </Turn>
       </main>

@@ -1,7 +1,7 @@
 {
   "name": "cadenza",
   "productName": "Cadenza",
-  "version": "3.2.9-denza.5",
+  "version": "3.2.9-denza.6",
   "description": "Cadenza: a personal music library whose songs play with lyrics that move to the music, exportable as lyric videos",
   "private": true,
   "type": "module",
@@ -41,10 +41,22 @@
       "electron/**",
       "dist-app/**",
       "package.json",
+      "vendor/kugou/**",
+      "shared/**",
       "!node_modules/onnxruntime-node/bin/napi-v6/{darwin,linux}/**",
       "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**",
-      "vendor/kugou/**",
-      "shared/**"
+      "!node_modules/@openai/codex-{darwin,linux}-*/**",
+      "!node_modules/@openai/codex-win32-arm64/**",
+      "!node_modules/@openai/codex-win32-x64/vendor/*/bin/codex-code-mode-host.exe",
+      "!node_modules/@openai/codex-win32-x64/vendor/*/codex-resources/**",
+      "!node_modules/@openai/codex-win32-x64/vendor/*/codex-path/**",
+      "!node_modules/@neteasecloudmusicapienhanced/api/public/**",
+      "!node_modules/@sansenjian/qq-music-api/{docs-dist,public}/**",
+      "!node_modules/kugoumusicapi/{public,docs,.github}/**",
+      "!vendor/kugou/{public,docs,.github}/**",
+      "!node_modules/node-taglib-sharp/src/**",
+      "!node_modules/**/*.map",
+      "!node_modules/**/*.d.ts"
     ],
     "asarUnpack": [
       "node_modules/onnxruntime-node/bin/**",

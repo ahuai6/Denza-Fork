@@ -9,9 +9,22 @@ export function request<T>(operation: string, args: object = {}): Promise<T> {
 export function bootOnline() {
   if (!Online) return () => {};
   let active = true;
-  const off = Online.onChanged((state) => {
+  const offChanged = Online.onChanged((state) => {
     if (active) online.set(state);
   });
+  const offProgress =
+    Online.onProgress?.((progress) => {
+      if (!active) return;
+      const cur = online.get();
+      const idx = cur.jobs.findIndex((j) => j.id === progress.id);
+      if (idx < 0) return;
+      const prev = cur.jobs[idx];
+      if (prev.status === progress.status && prev.received === progress.received && prev.total === progress.total)
+        return;
+      const jobs = cur.jobs.slice();
+      jobs[idx] = { ...prev, status: progress.status, received: progress.received, total: progress.total };
+      online.set({ jobs });
+    }) || (() => {});
   request<OnlineState>('state')
     .then((state) => {
       if (active) online.set(state);
@@ -19,7 +32,8 @@ export function bootOnline() {
     .catch(() => {});
   return () => {
     active = false;
-    off();
+    offChanged();
+    offProgress();
   };
 }
 export const jobId = () => crypto.randomUUID();

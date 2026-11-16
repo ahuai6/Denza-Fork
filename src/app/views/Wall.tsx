@@ -103,8 +103,7 @@ export function PosterWall() {
       ) : (
         <div className={layout === 'mosaic' ? s.mosaic : s.grid}>
           {list.map((t, i) => {
-            const big =
-              layout === 'mosaic' && (favorites.includes(t.id) || t.plays >= plays || h01(t.id) > 0.86) ? 2 : 1;
+            const big = layout === 'mosaic' && (idx.fav.has(t.id) || t.plays >= plays || h01(t.id) > 0.86) ? 2 : 1;
             return <Poster key={t.id} t={t} play={play} span={big} delay={Math.min(i, 40) * 14} />;
           })}
         </div>

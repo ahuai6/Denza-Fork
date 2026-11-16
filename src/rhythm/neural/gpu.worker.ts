@@ -7,7 +7,7 @@
 // AGPL-3.0). Part of Cadenza, AGPL-3.0-only (LICENSE, NOTICE.md).
 import { BeatThisWgsl, type BeatThisWgslManifest } from './wgsl/beatthis-runtime';
 import { HtdemucsWgsl, type HtdemucsWgslManifest } from './wgsl/htdemucs-runtime';
-import { runPercussiveEnergy } from './wgsl/percussive';
+import { runPercussiveEnergy, runPercussiveEnergyCpu } from './wgsl/percussive';
 import { melSpectrogram } from './mel';
 import { splitForModel, aggregateChunks, beatsFromLogits } from './grid';
 import { computeBeatAccents, formatBeatMeter } from './accents';
@@ -42,16 +42,23 @@ const post = (m: unknown, t: Transferable[] = []) => (self as unknown as Worker)
    segments, what is read from the answers) is this worker's either way. */
 let nextRpc = 1;
 const rpcs = new Map<number, { res: (v: any) => void; rej: (e: Error) => void }>();
-function native<T>(op: 'beat' | 'separate', args: Record<string, Float32Array>): Promise<T> {
+function native<T>(
+  op: 'beat' | 'separate',
+  args: Record<string, Float32Array>,
+  transfer: Transferable[] = [],
+): Promise<T> {
   const rpc = nextRpc++;
   return new Promise<T>((res, rej) => {
     rpcs.set(rpc, { res, rej });
-    post({ rpc, op, args });
+    post({ rpc, op, args }, transfer);
   });
 }
+/** An owned Transferable copy of `arr` so detaching never corrupts a shared backing buffer. */
+const ownBuffer = (arr: Float32Array) =>
+  arr.byteOffset === 0 && arr.byteLength === arr.buffer.byteLength ? arr : arr.slice();
 /** A Beat This! window as the native graph takes it: 1500 frames, a shorter one padded after its end. */
 const window1500 = (data: Float32Array) => {
-  if (data.length === 1500 * 128) return data;
+  if (data.length === 1500 * 128) return ownBuffer(data);
   const w = new Float32Array(1500 * 128);
   w.set(data);
   return w;
@@ -85,8 +92,8 @@ async function analyse(r: Extract<Req, { kind: 'analyse' }>): Promise<NeuralRhyt
   const nat = r.native,
     t0 = performance.now(),
     prog = (k: number) => post({ id: r.id, progress: k });
-  // (natively, the GPU here is only wanted for the percussive energy — and done without where there is none)
-  const dev = nat ? await openDevice().catch(() => null) : await openDevice(),
+  // Native ONNX mode stays off WebGPU entirely and computes HPSS energy directly on CPU.
+  const dev = nat ? null : await openDevice(),
     who = nat ? nat.label : label;
   // the beats: Beat This! over the 22.05 kHz mono mix, in 30 s chunks
   if (!nat && !beatThis) {
@@ -102,8 +109,9 @@ async function analyse(r: Extract<Req, { kind: 'analyse' }>): Promise<NeuralRhyt
     preds = [];
   for (let k = 0; k < chunks.length; k++) {
     const c = chunks[k];
+    const spect = nat ? window1500(c.data) : null;
     const out = nat
-      ? await native<{ beat: Float32Array; downbeat: Float32Array }>('beat', { spect: window1500(c.data) })
+      ? await native<{ beat: Float32Array; downbeat: Float32Array }>('beat', { spect: spect! }, [spect!.buffer])
       : await beatThis!.run(c.data, { slice: 'auto' });
     preds.push({
       start: c.start,
@@ -116,12 +124,11 @@ async function analyse(r: Extract<Req, { kind: 'analyse' }>): Promise<NeuralRhyt
   const track = aggregateChunks(preds, mel.frames),
     grid = beatsFromLogits(track.beat, track.downbeat);
   let energy = null;
-  if (dev)
-    try {
-      energy = await runPercussiveEnergy(dev, mel.data, mel.frames);
-    } catch (e) {
-      console.warn('[neural] percussive energy failed', e);
-    }
+  try {
+    energy = nat ? runPercussiveEnergyCpu(mel.data, mel.frames) : await runPercussiveEnergy(dev!, mel.data, mel.frames);
+  } catch (e) {
+    console.warn('[neural] percussive energy failed', e);
+  }
   const A = computeBeatAccents(mel, grid.beats, grid.downbeats, energy, track.beat);
   const tBeats = performance.now() - t0;
   prog(0.4);
@@ -146,7 +153,14 @@ async function analyse(r: Extract<Req, { kind: 'analyse' }>): Promise<NeuralRhyt
         st = await separateStems(
           r.left,
           r.right,
-          (l, rr) => native<{ left: Float32Array; right: Float32Array }[]>('separate', { left: l, right: rr }),
+          (l, rr) => {
+            const lc = l.slice(),
+              rc = rr.slice();
+            return native<{ left: Float32Array; right: Float32Array }[]>('separate', { left: lc, right: rc }, [
+              lc.buffer,
+              rc.buffer,
+            ]);
+          },
           (k) => prog(0.4 + 0.58 * k),
           undefined,
           nat.segment,

@@ -10,6 +10,7 @@ const { writeDownloadTags, verifyLyrics, nativeTtml } = require('../../electron/
 const { LyricsFlowAudio } = require('../../electron/online/lyricsflow-audio.cjs');
 const { createPublicResolver } = require('../../electron/online/public-resolvers.cjs');
 const { Downloads } = require('../../electron/downloads.cjs');
+const createQqProvider = require('../../electron/online/providers/qq.cjs');
 const track = { platform: 'apple', id: '123', title: 'Synthetic', artist: 'Fixture', album: 'Test', duration: 1 };
 const original = '[00:00.10]First & next\n[00:00.50]Second';
 const translation = '[00:00.10]第一句\n[00:00.50]第二句';
@@ -295,5 +296,41 @@ describe('multiple HTTP source recovery', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it('prefers direct musicu.fcg lyrics and skips redundant getLyric SDK worker call when primary lyric exists', async () => {
+    const sdkCalls: string[] = [];
+    const qqFast = createQqProvider({
+      call: async (method: string) => {
+        sdkCalls.push(method);
+        return { lyric: '[00:00.00]SDK fallback' };
+      },
+      json: async () => ({
+        req_0: {
+          data: {
+            lyric: Buffer.from('[00:00.00]Fast primary', 'utf8').toString('base64'),
+            trans: Buffer.from('[00:00.00]快速翻译', 'utf8').toString('base64'),
+          },
+        },
+      }),
+    });
+    const fast = await qqFast.lyrics({ id: 'qq-1', lyricId: '1' });
+    expect(fast.original).toBe('[00:00.00]Fast primary');
+    expect(fast.translation).toBe('[00:00.00]快速翻译');
+    expect(sdkCalls).toEqual([]);
+
+    const qqFallback = createQqProvider({
+      call: async (method: string) => {
+        sdkCalls.push(method);
+        return { lyric: '[00:00.00]SDK fallback', trans: '[00:00.00]回退翻译' };
+      },
+      json: async () => {
+        throw Error('musicu unavailable');
+      },
+    });
+    const fallback = await qqFallback.lyrics({ id: 'qq-2', lyricId: '2' });
+    expect(fallback.original).toBe('[00:00.00]SDK fallback');
+    expect(fallback.translation).toBe('[00:00.00]回退翻译');
+    expect(sdkCalls).toEqual(['getLyric']);
   });
 });

@@ -106,6 +106,7 @@ class AppleMusic {
   constructor(store, notify = () => {}, transport = fetch, desktop = () => require('electron')) {
     Object.assign(this, { store, notify, transport, desktop });
     this.tokens = [];
+    this.tokenFetch = null;
     this.cursors = new Map();
     this.window = null;
     this.popupWindows = new Set();
@@ -138,30 +139,71 @@ class AppleMusic {
     }
     return Buffer.concat(chunks).toString('utf8');
   }
+  validTokens(list) {
+    const now = Date.now() / 1000 + 120;
+    return (Array.isArray(list) ? list : []).filter(
+      (t) => t && typeof t.token === 'string' && typeof t.exp === 'number' && t.exp > now,
+    );
+  }
   async developerTokens(signal) {
-    if (this.tokens.some((t) => t.exp > Date.now() / 1000 + 120)) return this.tokens;
-    const page = await this.text(ORIGIN + '/us/browse', {}, signal);
-    const bundle = page.match(/\/assets\/index~[A-Za-z0-9_-]+\.js/);
-    if (!bundle) throw Error('Apple Music web player changed; sign-in cannot be verified');
-    const code = await this.text(ORIGIN + bundle[0], {}, signal);
-    const tokens = [];
-    for (const token of new Set(
-      code.match(/eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{20,}/g) || [],
-    )) {
-      try {
-        const [h, p] = token
-          .split('.')
-          .slice(0, 2)
-          .map((part) => JSON.parse(Buffer.from(part, 'base64url').toString()));
-        if (h.alg === 'ES256' && p.exp > Date.now() / 1000 + 120) tokens.push({ token, exp: p.exp, kid: h.kid });
-      } catch {
-        /* Ignore unrelated bundle strings. */
-      }
+    this.tokens = this.validTokens(this.tokens);
+    if (this.tokens.length) return this.tokens;
+    const stored = this.validTokens(this.store?.data?.appleTokens);
+    if (stored.length) {
+      this.tokens = stored;
+      return this.tokens;
     }
-    tokens.sort((a, b) => Number(b.kid === 'WebPlayKid') - Number(a.kid === 'WebPlayKid'));
-    this.tokens = tokens.slice(0, 8);
-    if (!this.tokens.length) throw Error('No current Apple Music web token');
-    return this.tokens;
+    if (!this.tokenFetch) {
+      this.tokenFetch = (async () => {
+        const fetchSignal = AbortSignal.any([this.lifetime.signal, AbortSignal.timeout(30000)]);
+        const page = await this.text(ORIGIN + '/us/browse', {}, fetchSignal);
+        const bundle = page.match(/\/assets\/index~[A-Za-z0-9_-]+\.js/);
+        if (!bundle) throw Error('Apple Music web player changed; sign-in cannot be verified');
+        const code = await this.text(ORIGIN + bundle[0], {}, fetchSignal);
+        const tokens = [];
+        for (const token of new Set(
+          code.match(/eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{20,}/g) || [],
+        )) {
+          try {
+            const [h, p] = token
+              .split('.')
+              .slice(0, 2)
+              .map((part) => JSON.parse(Buffer.from(part, 'base64url').toString()));
+            if (h.alg === 'ES256' && p.exp > Date.now() / 1000 + 120) tokens.push({ token, exp: p.exp, kid: h.kid });
+          } catch {
+            /* Ignore unrelated bundle strings. */
+          }
+        }
+        tokens.sort((a, b) => Number(b.kid === 'WebPlayKid') - Number(a.kid === 'WebPlayKid'));
+        const next = tokens.slice(0, 8);
+        if (!next.length) throw Error('No current Apple Music web token');
+        this.tokens = next;
+        if (this.store?.data) {
+          this.store.data.appleTokens = next;
+          if (typeof this.store.scheduleSave === 'function') void this.store.scheduleSave(200).catch(() => {});
+          else void this.store.save?.().catch?.(() => {});
+        }
+        return next;
+      })().finally(() => {
+        this.tokenFetch = null;
+      });
+    }
+    if (!signal) return this.tokenFetch;
+    signal.throwIfAborted();
+    return new Promise((resolve, reject) => {
+      const onAbort = () => reject(Error('Apple Music request cancelled'));
+      signal.addEventListener('abort', onAbort, { once: true });
+      this.tokenFetch.then(
+        (value) => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(value);
+        },
+        (err) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(err);
+        },
+      );
+    });
   }
   async api(path, signal, credential, retry = true) {
     if (!path.startsWith('/v1/')) throw Error('Invalid Apple Music API path');
@@ -190,6 +232,7 @@ class AppleMusic {
     }
     if (retry) {
       this.tokens = [];
+      if (this.store?.data) delete this.store.data.appleTokens;
       return this.api(path, signal, credential, false);
     }
     throw Error('Apple Music session expired; sign in again');
@@ -298,9 +341,12 @@ class AppleMusic {
     this.closeWindows();
     await this.checking?.catch(() => {});
     await this.session().clearStorageData();
-    delete this.store.data.accounts.apple;
     this.cursors.clear();
-    await this.store.save();
+    if (typeof this.store.deleteAccount === 'function') await this.store.deleteAccount('apple');
+    else {
+      delete this.store.data.accounts.apple;
+      await this.store.save();
+    }
     this.notify();
     return this.store.accounts();
   }

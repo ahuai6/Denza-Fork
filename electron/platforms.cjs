@@ -84,9 +84,12 @@ class Platforms {
   async logout(platform) {
     const provider = this.provider(platform);
     if (provider.logout) return provider.logout();
-    delete this.store.data.accounts[platform];
     for (const [id, state] of this.sessions) if (state.platform === platform) this.sessions.delete(id);
-    await this.store.save();
+    if (typeof this.store.deleteAccount === 'function') await this.store.deleteAccount(platform);
+    else {
+      delete this.store.data.accounts[platform];
+      await this.store.save();
+    }
     return this.store.accounts();
   }
   async page(platform, kind, id, page, signal) {
