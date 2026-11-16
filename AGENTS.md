@@ -12,3 +12,4 @@
 
 - 新增窗口须通过 `actions/dialogs.ts` / `ui/DialogOwner.tsx` 接入原生层级、互斥、输入与草稿恢复逻辑；不得仅以独立 portal 开关叠在原面板上。空间主面板通过 `SpaceShell` 的 `SpaceView` 选择。
 - AM 元数据语言按用户要求固定简体中文（`apple-music.cjs` 的 `METADATA_LANGUAGE`），不因界面语言改变，也不因此更换账号 storefront；公开链接和账号歌单使用相同语言策略。
+- 若进行性能、架构、内存或安装包体积优化，先阅读 `docs/DENZA-PERFORMANCE-AUDIT.md` 获取基线与优先级清单；如已有前序改造交付，一并阅读 `docs/DENZA-OPTIMIZATION-HANDOFF.md`。每轮优化完成并验证后，必须新增或更新 `docs/DENZA-OPTIMIZATION-HANDOFF.md` 记录详细改动、数据结构变更、实测对比数据、真实检查范围与后续接手注意项。
