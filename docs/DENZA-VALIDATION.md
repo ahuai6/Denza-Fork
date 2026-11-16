@@ -147,3 +147,9 @@
   - 聆听室坐在座椅中关闭耳机并实际播放测试 WAV，确认 `room === 'listening'`、`splitterCount === true`、六只音箱（`C / L / R / SL / SR / LFE`）全亮（`lit: true`），其中 `L-only` 段前左 `L`（`0.131/0.0918`）显著大于 `R`（`0.0173/0.0252`）、`R-only` 段前右对称翻转、`Surround` 反相段后环绕 `SL/SR`（`0.0786/0.0777`）显著高于前左右（`0.0447/0.0454`）且中置/低音清零（`C: 0, LFE: 0`）。
   - 经典设置页切入第 1 帧即出现 `<h1>设置</h1>`（修复此前前 6 帧白屏延迟），高级设置折叠区 `aria-hidden` 与平滑展开正常，暂停态背景 Canvas 重绘降至 `0 fills/s`。
 - 本地环境仍未安装 `cargo` 与 `playwright`：完整原版经典/空间图形回归（`tests/desktop.cjs`、`tests/space.cjs`、`tests/online-desktop.cjs`）、实体显示卡/Windows 音频外设硬件听感、以及真实平台在线账号与会员流仍未在本机验证，不宣称为通过。Windows 安装包与原生 `cadenza-audio.exe` 构建由 GitHub Actions（`denza-build.yml`）在合并 `custom` 后验证并另记。
+
+### 3.2.9-denza.7 Windows 最终构建
+
+- [工作流 43917867943](https://github.com/ahuai6/Denza-Fork/actions/runs/43917867943) 对 `custom` 合并提交 `aa77a6aa27f3d20b635dce3234fba4d0f086ec4e` 全部通过（耗时 13m56s）：43 个文件、447 项全量单元测试、类型检查、应用构建、模型资源拉取、`cadenza-audio.exe` 原生音频引擎、安装版（`Cadenza-Setup-3.2.9-denza.7.exe` `455.95 MB`）/便携版（`Cadenza-3.2.9-denza.7-portable.exe` `425.10 MB`，`resources/app.asar` `175.18 MB`、`app.asar.unpacked` `430.46 MB`）打包及 `scripts/packaged-smoke.cjs`（`Packaged modules and text runtime passed (9 models; no account sign-in)`）检查。
+- [构建产物 14254301476](https://github.com/ahuai6/Denza-Fork/actions/runs/43917867943/artifacts/14254301476) 包含安装版、便携版与 `SHA256SUMS.txt`。构建完成后仅补充验证与交接文档（`docs/**`），不修改应用运行代码；发布工作流再次校验提交已合并、运行/构建输入一致及资产 SHA256。
+- 完整经典/空间图形回归未在本次自动化构建中执行，以及真实在线账号、实体显示卡与 Windows 实机音频未实测的限制继续保留。
