@@ -53,6 +53,9 @@ button:disabled {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+[role='dialog']:focus-visible {
+  outline: none;
+}
 h1,
 h2,
 h3 {
@@ -168,11 +171,11 @@ textarea {
   white-space: nowrap;
 }
 
-/* entrances: a short rise and fade; lists and grids follow one item after another. Exits: a quick fade, nothing more */
+/* entrances: a soft unhurried rise and fade; exits: a clean gentle dissolve */
 @keyframes enter {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
 }
 @keyframes enterSoft {
@@ -185,17 +188,29 @@ textarea {
     opacity: 0;
   }
 }
-/* something that pops from where it was asked for (a menu, a dropdown): it grows from that corner */
+/* something that pops from where it was asked for (a menu, a dropdown): it grows gently from that corner */
 @keyframes pop {
   from {
     opacity: 0;
-    transform: scale(0.96) translateY(-3px);
+    transform: scale(0.97) translateY(-4px);
   }
 }
 @keyframes popOut {
   to {
     opacity: 0;
-    transform: scale(0.98);
+    transform: scale(0.985) translateY(-2px);
+  }
+}
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.988);
+  }
+}
+@keyframes panelOut {
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.988);
   }
 }
 .enter {

@@ -7,10 +7,11 @@ import { settings, lib, useStore } from '../state';
 import { Lib, D, type Settings } from '../bridge';
 import { setSettings, setLang } from '../actions/settings';
 import { readAllRhythmsAgain, clearStoredData, resetEverything } from '../actions/data';
-import { Button, Dropdown } from '../ui/kit';
+import { Button, Dropdown, OUT_MS, usePresence } from '../ui/kit';
 import { FontPicker } from '../ui/fonts';
 import { SettingField } from '../ui/SettingField';
 import { ForkNotice } from '../ui/ForkNotice';
+import { useOnlineSurface } from '../ui/OnlineSurface';
 import type { SettingKey } from '../settings/schema';
 import { ts } from './i18n';
 import s from './SpaceSettings.module.css';
@@ -83,28 +84,46 @@ function Ask({ k, act, danger, icon }: { k: string; act: () => unknown; danger?:
   );
 }
 
-export function SpaceSettings({ section, onClose }: { section?: string; onClose: () => void }) {
+export function SpaceSettings({
+  open = true,
+  section,
+  onClose,
+}: {
+  open?: boolean;
+  section?: string;
+  onClose: () => void;
+}) {
   const st = useStore(settings),
     folders = useStore(lib, (x) => x.folders),
-    body = useRef<HTMLDivElement>(null);
+    body = useRef<HTMLDivElement>(null),
+    surface = useOnlineSurface(),
+    { shown, closing } = usePresence(open, OUT_MS);
   const set = (p: Partial<Settings>) => {
     setSettings(p);
   };
   // (only the list scrolls to the section: scrollIntoView would scroll every box around it too)
   useEffect(() => {
+    if (!open) return;
     const box = body.current,
       el = section ? box?.querySelector<HTMLElement>(`[data-section="${section}"]`) : null;
     if (box && el) box.scrollTo({ top: el.offsetTop - box.offsetTop, behavior: 'smooth' });
-  }, [section]);
+  }, [open, section]);
   useEffect(() => {
+    if (!open) return;
     const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !document.querySelector('[role="listbox"]:not([data-closing])')) onClose();
     };
     addEventListener('keydown', k);
     return () => removeEventListener('keydown', k);
-  }, [onClose]);
+  }, [open, onClose]);
+  if (!shown) return null;
   return (
-    <section className={`hud card ${s.panel}`} aria-label={ts('s.title')} data-test="space-settings">
+    <section
+      className={`hud card ${s.panel} ${surface.className}`}
+      aria-label={ts('s.title')}
+      data-test="space-settings"
+      data-closing={closing || undefined}
+    >
       <header className={s.head}>
         <h2>{ts('s.title')}</h2>
         <button type="button" className={s.close} onClick={onClose} aria-label={ts('close')}>

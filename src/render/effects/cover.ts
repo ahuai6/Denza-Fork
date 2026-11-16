@@ -181,10 +181,12 @@ export function drawCoverSubject(
   const pl = edge === 'blend' ? S * 0.55 : S * 0.2,
     pr = edge === 'album' ? S * 0.62 : pl,
     pv = edge === 'blend' ? S * 0.55 : S * 0.25;
-  const bw = S + pl + pr,
+  const md = gfx(),
+    bw = S + pl + pr,
     bh = S + pv * 2,
-    W = Math.min(2048, Math.ceil(bw * q)),
-    H = Math.min(2048, Math.ceil(bh * q)),
+    maxDim = md === 'default' && bl > 0.04 ? 768 : 2048,
+    W = Math.min(maxDim, Math.ceil(bw * q)),
+    H = Math.min(maxDim, Math.ceil(bh * q)),
     k = W / bw;
   const A = groupCanvas(0, W, H),
     B = groupCanvas(1, W, H),
@@ -196,8 +198,7 @@ export function drawCoverSubject(
   coverGroup(a, f, x, y, S, vinyl, 1, o);
   b.setTransform(1, 0, 0, 1, 0, 0);
   b.clearRect(0, 0, W, H);
-  const rb = bl * S * k * 0.035,
-    md = gfx();
+  const rb = bl * S * k * 0.035;
   if (md === 'default') {
     b.filter = `blur(${rb.toFixed(2)}px)`;
     b.drawImage(A, 0, 0);

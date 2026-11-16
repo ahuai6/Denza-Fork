@@ -156,8 +156,8 @@ export function SettingsView() {
           </span>
           <Icon n="chevronDown" size={18} />
         </button>
-        {adv && (
-          <>
+        <div className={s.advWrap} data-open={adv} inert={!adv} aria-hidden={!adv}>
+          <div className={s.advInner}>
             <RhythmGroup st={st} />
             <Group title={tx('s.set.perf')} help={tx('s.set.scaleHelp')}>
               <SettingField k="gfx" />
@@ -179,8 +179,8 @@ export function SettingsView() {
               )}
             </Group>
             <DataGroup />
-          </>
-        )}
+          </div>
+        </div>
         <Group title={tx('on.forkTitle')}>
           <ForkNotice />
         </Group>
@@ -459,13 +459,22 @@ function SettingsIndex() {
     [cur, setCur] = useState(0),
     box = useRef<HTMLElement>(null),
     pinned = useRef<number | null>(null);
-  const groups = () => [...(box.current?.parentElement?.querySelectorAll<HTMLElement>('[data-group]') || [])];
+  const groups = () =>
+    [...(box.current?.parentElement?.querySelectorAll<HTMLElement>('[data-group]') || [])].filter(
+      (g) => !g.closest('[aria-hidden="true"]'),
+    );
   useLayoutEffect(() => {
     const read = () => setItems(groups().map((g) => g.querySelector('h2')?.textContent || ''));
     read();
     const mo = new MutationObserver(read);
     if (box.current?.parentElement)
-      mo.observe(box.current.parentElement, { childList: true, subtree: true, characterData: true });
+      mo.observe(box.current.parentElement, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: ['aria-hidden'],
+      });
     // (the one whose heading has passed the top; at the very bottom — where the last ones can never reach the top — the
     // last; and one picked from here stays marked until the page is scrolled by hand)
     const sc = box.current?.closest<HTMLElement>('[data-scroll]');

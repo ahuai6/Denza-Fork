@@ -727,6 +727,7 @@
   text-align: left;
   color: var(--fg);
   white-space: nowrap;
+  transition: background var(--t-fast) var(--ease-soft);
 }
 .menu button > span {
   overflow: hidden;
@@ -795,7 +796,7 @@
 }
 .turnBox > .turn[data-pre] {
   opacity: 0;
-  transform: translateY(8px);
+  transform: translateY(6px);
   transition: none;
 }
 .turnBox > .turn[data-turn='out'] {

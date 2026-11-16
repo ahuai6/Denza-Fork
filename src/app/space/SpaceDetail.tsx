@@ -1,12 +1,13 @@
 // What you click in the space opens here, where you stand (the view never moves for it): an album or a playlist opened
 // out into its songs, or one song; with everything the classic library offers for them — play from any song, add to
 // the queue, favourites, playlists made, renamed, deleted, songs added and taken out.
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { tx } from '../../i18n';
 import { Lib, type Track } from '../bridge';
 import { lib, ui, useStore, useIndex, fmtTime } from '../state';
 import { Icon } from '../ui/icons';
-import { Cover } from '../ui/kit';
+import { Cover, OUT_MS, usePresence } from '../ui/kit';
+import { useOnlineSurface } from '../ui/OnlineSurface';
 
 const SyncedPlaylists = lazy(() => import('../ui/OnlineMusic').then((m) => ({ default: m.SyncedPlaylists })));
 import { player, playIds } from '../playback/player';
@@ -20,9 +21,16 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
   const idx = useIndex(),
     playlists = useStore(lib, (x) => x.playlists),
     favs = useStore(lib, (x) => x.favorites),
-    curId = useStore(player, (x) => x.id);
+    curId = useStore(player, (x) => x.id),
+    surface = useOnlineSurface();
   const [rename, setRename] = useState<string | null>(null),
-    [adding, setAdding] = useState<string[] | null>(null);
+    [adding, setAdding] = useState<string[] | null>(null),
+    lastDetail = useRef<Detail>(null),
+    lastAdding = useRef<string[] | null>(null);
+  if (detail) lastDetail.current = detail;
+  if (adding) lastAdding.current = adding;
+  const activeDetail = detail || lastDetail.current;
+  const { shown: addShown, closing: addClosing } = usePresence(!!adding && !!detail, OUT_MS);
   useEffect(() => {
     setRename(null);
     setAdding(null);
@@ -31,6 +39,7 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
     if (!detail) return;
     const k = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !ui.get().dialog) {
+        if (document.querySelector('[role="listbox"]:not([data-closing])')) return;
         if (adding) setAdding(null);
         else onClose();
       }
@@ -39,9 +48,9 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
     return () => removeEventListener('keydown', k);
   }, [detail, onClose, adding]);
   const view = useMemo(() => {
-    if (!detail) return null;
-    if (detail.kind === 'album') {
-      const a = idx.albums.find((g) => g.key === detail.key);
+    if (!activeDetail) return null;
+    if (activeDetail.kind === 'album') {
+      const a = idx.albums.find((g) => g.key === activeDetail.key);
       if (!a) return null;
       return {
         eye: ts('kind.album'),
@@ -52,9 +61,9 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
         list: null as null | { id: string; fav: boolean },
       };
     }
-    if (detail.kind === 'playlist') {
-      const fav = detail.key === 'favorites',
-        p = fav ? null : playlists.find((x) => x.id === detail.key);
+    if (activeDetail.kind === 'playlist') {
+      const fav = activeDetail.key === 'favorites',
+        p = fav ? null : playlists.find((x) => x.id === activeDetail.key);
       if (!fav && !p) return null;
       const ids = fav ? favs : p!.tracks,
         tracks = ids.map((id) => idx.byId.get(id)).filter(Boolean) as NonNullable<ReturnType<typeof idx.byId.get>>[];
@@ -64,10 +73,10 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
         meta: tx('s.tracks', { n: tracks.length }),
         cover: tracks[0]?.cover ?? null,
         tracks,
-        list: { id: detail.key, fav },
+        list: { id: activeDetail.key, fav },
       };
     }
-    const t = idx.byId.get(detail.key);
+    const t = idx.byId.get(activeDetail.key);
     if (!t) return null;
     return {
       eye: ts('kind.song'),
@@ -77,16 +86,19 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
       tracks: [t],
       list: null,
     };
-  }, [detail, idx, playlists, favs]);
-  if (!detail || !view) return null;
-  const remotePlaylist = detail.kind === 'playlist' ? playlists.find((p) => p.id === detail.key && p.remote) : null;
+  }, [activeDetail, idx, playlists, favs]);
+  const { shown, closing } = usePresence(!!detail && !!view, OUT_MS);
+  if (!shown || !activeDetail || !view) return null;
+  const remotePlaylist =
+    activeDetail.kind === 'playlist' ? playlists.find((p) => p.id === activeDetail.key && p.remote) : null;
   if (remotePlaylist?.remote)
     return (
       <section
-        className={`hud card ${s.panel} ${s.detail}`}
+        className={`hud card ${s.panel} ${s.detail} ${surface.className}`}
         aria-label={remotePlaylist.name}
         data-test="space-detail"
         data-remote="true"
+        data-closing={!detail || closing || undefined}
       >
         <header className={s.dhead}>
           <span className={s.dcover}>
@@ -118,8 +130,8 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
         </div>
       </section>
     );
-  const ids = view.tracks.map((t) => t.id),
-    one = detail.kind === 'song';
+  const one = activeDetail.kind === 'song',
+    ids = view.tracks.map((t) => t.id);
   const fav = (id: string) => idx.fav.has(id),
     setFav = (id: string, on: boolean) => Lib?.favorite(id, on);
   // (a song of this card, as the commands take it)
@@ -128,7 +140,12 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
     playIds(ids, i).catch(() => {});
   };
   return (
-    <section className={`hud card ${s.panel} ${s.detail}`} aria-label={view.title} data-test="space-detail">
+    <section
+      className={`hud card ${s.panel} ${s.detail} ${surface.className}`}
+      aria-label={view.title}
+      data-test="space-detail"
+      data-closing={!detail || closing || undefined}
+    >
       <header className={s.dhead}>
         <span className={s.dcover}>
           <Cover k={view.cover} />
@@ -222,7 +239,9 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
           </>
         )}
       </div>
-      {adding && <AddTo ids={adding} onDone={() => setAdding(null)} />}
+      {addShown && lastAdding.current && (
+        <AddTo ids={lastAdding.current} closing={!adding || addClosing} onDone={() => setAdding(null)} />
+      )}
       {!one && (
         <ol className={s.list}>
           {view.tracks.map((t, i) => (
@@ -275,7 +294,7 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
 }
 
 /** Into which playlist: the ones there are, or a new one named here. */
-function AddTo({ ids, onDone }: { ids: string[]; onDone: () => void }) {
+function AddTo({ ids, closing, onDone }: { ids: string[]; closing?: boolean; onDone: () => void }) {
   const playlists = useStore(lib, (x) => x.playlists),
     [name, setName] = useState('');
   const add = async (id: string, nm: string) => {
@@ -287,7 +306,7 @@ function AddTo({ ids, onDone }: { ids: string[]; onDone: () => void }) {
     onDone();
   };
   return (
-    <div className={s.addTo} role="dialog" aria-label={tx('s.addToPl')}>
+    <div className={s.addTo} role="dialog" aria-label={tx('s.addToPl')} data-closing={closing || undefined}>
       <form
         className={s.newRow}
         onSubmit={(e) => {

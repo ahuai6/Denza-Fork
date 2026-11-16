@@ -83,6 +83,7 @@ export class RoomAudio {
   private songIn!: GainNode;
   private chains: Chain[] = [];
   private feeds: Partial<Record<Feed, AudioNode>> = {};
+  private splitter: ChannelSplitterNode | null = null;
   private pool!: Chain;
   private amb!: GainNode;
   private ambBuf: AudioBuffer | null = null;
@@ -146,6 +147,8 @@ export class RoomAudio {
     // the song as heard in the room: into every source's chain
     this.scene = ctx.createGain();
     this.scene.gain.value = 0;
+    this.splitter = ctx.createChannelSplitter(2);
+    this.scene.connect(this.splitter);
     this.chains = this.o.sources.map((s) => this.chain(ctx, s));
     this.chains.forEach((c) => (c.src.feed ? this.feed(ctx, c.src.feed) : this.scene).connect(c.input));
     // the rooms' own music has a chain of its own, at its source
@@ -335,44 +338,67 @@ export class RoomAudio {
   private feed(ctx: AudioContext, f: Feed): AudioNode {
     const have = this.feeds[f];
     if (have) return have;
-    const split = ctx.createChannelSplitter(2),
+    const split = this.splitter || ctx.createChannelSplitter(2),
       gain = (v: number) => {
         const g = ctx.createGain();
         g.gain.value = v;
         return g;
       };
-    this.scene.connect(split);
+    if (!this.splitter) {
+      this.splitter = split;
+      this.scene.connect(split);
+    }
     let out: AudioNode;
     if (f === 'L' || f === 'R') {
-      out = gain(1);
-      split.connect(out, f === 'L' ? 0 : 1);
+      // Slightly attenuate the opposite channel so front L/R widen clearly around C while still playing on mono tracks
+      const mix = gain(1),
+        own = gain(0.95),
+        cross = gain(-0.18),
+        ch = f === 'L' ? 0 : 1;
+      split.connect(own, ch);
+      split.connect(cross, 1 - ch);
+      own.connect(mix);
+      cross.connect(mix);
+      out = mix;
     } else {
-      // (the middle: both halves; the side: one less the other)
-      const mid = gain(1),
-        a = gain(0.5),
-        b = gain(f === 'SL' || f === 'SR' ? -0.5 : 0.5);
-      const first = f === 'SR' ? 1 : 0;
-      split.connect(a, first);
-      split.connect(b, 1 - first);
-      a.connect(mid);
-      b.connect(mid);
-      if (f === 'C') out = mid;
-      else if (f === 'LFE') {
+      const mid = gain(1);
+      if (f === 'C') {
+        const a = gain(0.5),
+          b = gain(0.5);
+        split.connect(a, 0);
+        split.connect(b, 1);
+        a.connect(mid);
+        b.connect(mid);
+        out = mid;
+      } else if (f === 'LFE') {
+        const a = gain(0.5),
+          b = gain(0.5);
+        split.connect(a, 0);
+        split.connect(b, 1);
+        a.connect(mid);
+        b.connect(mid);
         const lp = ctx.createBiquadFilter();
         lp.type = 'lowpass';
-        lp.frequency.value = 110;
-        lp.Q.value = 0.6;
-        const g = gain(1.6);
+        lp.frequency.value = 115;
+        lp.Q.value = 0.7;
+        const g = gain(1.75);
         mid.connect(lp);
         lp.connect(g);
         out = g;
       } else {
-        // (the surrounds a few milliseconds late and a little dark, as the back of a room is)
+        // Surrounds blend stereo ambience difference with a gentle delayed direct bed so narrow/mono songs still fill the back
+        const first = f === 'SR' ? 1 : 0,
+          a = gain(0.62 + 0.22),
+          b = gain(-0.62);
+        split.connect(a, first);
+        split.connect(b, 1 - first);
+        a.connect(mid);
+        b.connect(mid);
         const d = ctx.createDelay(0.05),
           lp = ctx.createBiquadFilter();
-        d.delayTime.value = f === 'SL' ? 0.013 : 0.017;
+        d.delayTime.value = f === 'SL' ? 0.014 : 0.018;
         lp.type = 'lowpass';
-        lp.frequency.value = 7000;
+        lp.frequency.value = 5200;
         mid.connect(d);
         d.connect(lp);
         out = lp;

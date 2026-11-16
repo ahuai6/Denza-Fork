@@ -36,23 +36,27 @@
   --r-cover-md: var(--r-1);
   --r-cover-np: var(--r-3);
 
-  /* motion: fast in, slow settle */
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  /* motion: silkily decelerated, graceful exits shorter than entrances */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-soft: cubic-bezier(0.25, 0.85, 0.35, 1);
+  --ease-in: cubic-bezier(0.45, 0, 0.75, 0.25);
   --ease-io: cubic-bezier(0.65, 0, 0.35, 1);
-  --t-fast: 120ms;
-  --t-med: 220ms;
-  --t-fade: 180ms; /* a scrim fading in */
-  --t-out: 120ms; /* anything leaving: menus, modals, the old page */
-  --t-exit: 220ms; /* chrome leaving */
-  --t-swap-out: 220ms; /* the old content of a swap leaving */
-  --t-fill: 300ms; /* a progress fill moving */
-  --t-show: 280ms; /* controls fading in */
-  --t-stagger: 420ms; /* each item of a staggered list */
-  --t-enter: 320ms; /* a page or block easing in */
-  --t-slow: 420ms; /* larger moves: lyric lines, panels, chrome coming back */
-  --t-panel: 460ms; /* a side panel sliding */
+  --t-fast: 150ms;
+  --t-med: 260ms;
+  --t-fade: 220ms; /* a scrim fading in */
+  --t-out: 180ms; /* anything leaving: menus, dropdowns, modals, the old page */
+  --t-exit: 240ms; /* chrome leaving */
+  --t-swap-out: 240ms; /* the old content of a swap leaving */
+  --t-fill: 320ms; /* a progress fill moving */
+  --t-show: 320ms; /* controls fading in */
+  --t-hud: 320ms; /* HUD cards, focus panels, search lists entering */
+  --t-stagger: 440ms; /* each item of a staggered list */
+  --t-enter: 360ms; /* a page or block easing in */
+  --t-veil: 420ms; /* space teleport veil transition */
+  --t-slow: 460ms; /* larger moves: lyric lines, panels, chrome coming back */
+  --t-panel: 480ms; /* a side panel sliding */
   --t-reveal: 560ms; /* the slowest reveals */
+  --t-sign: 680ms; /* room signage and scene load reveal */
   --t-delay: 120ms; /* chrome waits this long before coming back */
   --t-stagger-step: 16ms;
   --t-stage: 620ms; /* the sheet rising, the stage stepping back, a drawer sliding */

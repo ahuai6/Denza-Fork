@@ -3,6 +3,7 @@
 // classic pages, or the space (a cathedral to walk through, src/app/space); changing it restarts the app.
 import './styles/base.css';
 import './words';
+import './online/words';
 import { createRoot } from 'react-dom/client';
 import { D, Lib } from './bridge';
 

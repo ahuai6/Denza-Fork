@@ -739,14 +739,17 @@ export class Engine extends Emitter<EngineEvents> {
       this.gain();
       this.dirty = true;
     }
-    const vis = this.view !== 'hidden';
+    const vis = this.view !== 'hidden' && (typeof document === 'undefined' || !document.hidden);
     this.video.sync(this.t, this.playing, s.audioStart, vis && s.style.bgStyle === 'video');
     this.mv.sync(this.t, this.playing, s.audioStart, vis && (this.mv.on || this.mv.k > 0));
     if (this.mv.tick()) this.dirty = true;
     if (this.handoff.tick()) this.dirty = true;
     if (this.playing && this.mv.k > 0) this.dirty = true;
     if (this.fadeOut || this.carry) this.dirty = true;
-    if (this.view === 'ambient') this.dirty = true; // the ambient field is alive even while paused
+    // The ambient field drifts slowly: when paused, pace ambient redraws to ~24fps instead of spinning at monitor Hz
+    if (vis && this.view === 'ambient' && !this.dirty) {
+      if (this.playing || now - this.lastDraw >= 40) this.dirty = true;
+    }
     const cap = this.render.fps > 0 ? 1000 / this.render.fps : 0,
       due = !cap || now - this.lastDraw >= cap - 1.5;
     let drew = false;

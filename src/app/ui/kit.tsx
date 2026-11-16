@@ -22,7 +22,7 @@ import surface from './OnlineSurface.module.css';
 export { s as kit };
 
 /** How long a thing takes to leave (--t-out): it stays mounted that long, marked closing. */
-export const OUT_MS = 130;
+export const OUT_MS = 180;
 /** Keep a thing mounted while it leaves: `shown` stays true for OUT_MS after `open` goes false, `closing` meanwhile. */
 export function usePresence(open: boolean, ms = OUT_MS) {
   const [shown, setShown] = useState(open),
@@ -377,8 +377,9 @@ function DropList({
     [pos, setPos] = useState<CSSProperties | null>(null),
     [hi, setHi] = useState(-1);
   const pict = !!anchor.current?.closest('.on-picture');
-  const space = !!anchor.current?.closest('.' + surface.space);
-  const lite = !!anchor.current?.closest('.' + surface.lite);
+  const spaceEl = typeof document !== 'undefined' ? document.querySelector('[data-test="space"]') : null;
+  const space = !!(anchor.current?.closest('.' + surface.space) || spaceEl);
+  const lite = !!(anchor.current?.closest('.' + surface.lite) || spaceEl?.classList.contains('space-lite'));
   useLayoutEffect(() => {
     if (!open || !anchor.current) return;
     const a = anchor.current.getBoundingClientRect(),
@@ -452,6 +453,7 @@ function DropList({
         (pict ? ' on-picture' : '')
       }
       role="listbox"
+      data-glass-skip={space ? '' : undefined}
       data-closing={closing || undefined}
       style={pos}
     >
@@ -717,6 +719,9 @@ function MenuList({
     [sub, setSub] = useState<{ i: number; x: number; y: number; w: number } | null>(null),
     subTm = useRef(0);
   const pict = ui.get().layer !== 'none';
+  const spaceEl = typeof document !== 'undefined' ? document.querySelector('[data-test="space"]') : null;
+  const inSpace = !!spaceEl;
+  const inSpaceLite = !!spaceEl?.classList.contains('space-lite');
   useLayoutEffect(() => {
     if (!ref.current) return;
     const r = ref.current.getBoundingClientRect();
@@ -758,12 +763,21 @@ function MenuList({
     const r = el.getBoundingClientRect();
     setSub({ i, x: r.right + 2, y: r.top - 5, w: r.left - 2 });
   };
+  const subItems = sub ? (items[sub.i] as MenuItem)?.sub : undefined;
+  const lastSub = useRef<{ items: (MenuItem | '-')[]; x: number; y: number; w: number } | null>(null);
+  if (sub && subItems) lastSub.current = { items: subItems, x: sub.x, y: sub.y, w: sub.w };
+  const { shown: subShown, closing: subClosing } = usePresence(!!(sub && subItems && !closing), OUT_MS);
   const node = (
     <div
-      className={s.menu + ' glass' + (pict ? ' on-picture' : '')}
+      className={
+        s.menu +
+        (inSpace ? ' card ' + surface.space + (inSpaceLite ? ' ' + surface.lite : '') : ' glass') +
+        (pict ? ' on-picture' : '')
+      }
       ref={ref}
       role="menu"
       data-menu
+      data-glass-skip={inSpace ? '' : undefined}
       data-closing={closing || undefined}
       style={pos || { left: at.x, top: at.y, visibility: 'hidden' }}
       onPointerEnter={onEnter}
@@ -808,15 +822,16 @@ function MenuList({
     </div>
   );
   // (a submenu is the menu's sibling, not its child: a fixed box inside a scaling one would scale and move with it)
+  const activeSub = subItems ? { items: subItems, x: sub!.x, y: sub!.y, w: sub!.w } : lastSub.current;
   const both = (
     <>
       {node}
-      {sub && (items[sub.i] as MenuItem)?.sub && (
+      {subShown && activeSub && (
         <MenuList
-          items={(items[sub.i] as MenuItem).sub!}
-          at={{ x: sub.x, y: sub.y }}
-          side={sub.w}
-          closing={closing}
+          items={activeSub.items}
+          at={{ x: activeSub.x, y: activeSub.y }}
+          side={activeSub.w}
+          closing={closing || subClosing}
           onEnter={() => clearTimeout(subTm.current)}
         />
       )}

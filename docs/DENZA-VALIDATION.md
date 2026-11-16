@@ -136,3 +136,14 @@
 - [工作流 43893899000](https://github.com/ahuai6/Denza-Fork/actions/runs/43893899000) 对 `custom` 合并提交 `f15fc03bb69da2b90e4b7275b7b050045c444305` 全部通过：42 个文件、444 项全量单元测试、类型检查、应用构建、模型资源拉取、`cadenza-audio.exe` 原生音频引擎、安装版（`Cadenza-Setup-3.2.9-denza.6.exe` `455.95 MB`，较 `denza.5` 的 `505.51 MB` 减少 `49.56 MB`）/便携版（`Cadenza-3.2.9-denza.6-portable.exe` `425.01 MB`，较 `denza.5` 的 `466.59 MB` 减少 `41.58 MB`）打包及 `scripts/packaged-smoke.cjs`（`Packaged modules and text runtime passed (9 models; no account sign-in)`）检查。
 - [构建产物 14237804350](https://github.com/ahuai6/Denza-Fork/actions/runs/43893899000/artifacts/14237804350) 包含安装版、便携版与 `SHA256SUMS.txt`。构建完成后仅补充验证与交接文档，不修改应用运行代码；发布工作流再次校验提交已合并、运行/构建输入一致及资产 SHA256。
 - 完整经典/空间图形回归未在本次自动化构建中执行，以及真实在线账号、实体显示卡与 Windows 实机音频未实测的限制继续保留。
+
+## 3.2.9-denza.7 动效、光影、声场与渲染优化验证
+
+- 类型检查、`online:deps` / `online:deps:check`、全量单元测试、`build:app` 与 `vite build --mode web` 本地通过；新增 `tests/unit/ux-audio-fixes.test.ts`，覆盖 `on.short` / `on.close` 同步字典注册、侧房门口过界区入室判定与 `RoomAudio` 单分路器及 5.1 六声道亮灯/上混矩阵。
+- 使用真实 Electron 主进程与自制 4 秒立体声四段测试 WAV（`L-only`、`R-only`、`C-only`、`Surround` 反相）对构建后的 `dist-app/index.html` 进行实测验证并审阅截图：
+  - 空间启动首帧左上角按钮文案即显示 `在线`，打开弹窗显示 `关闭`，未再出现 `on.short`；`[role="dialog"].card` 保持透明底+`GlassPass` 马赛克单层白边（修复 `:focus-visible` 外框叠加），展开的平台 `[role="listbox"]` 呈 `rgba(24, 20, 16, 0.78)` + `blur(22px) saturate(1.3)`，搜索列表 `.results` 同样阻隔底层文字透出；空间设置关闭时确认进入 `data-closing` 优雅退场流程。
+  - 空间画面对比截图确认磨砂灰雾已消除，中庭天光、墙灯、光束及聆听室明暗氛围更通透。
+  - 空间静止空闲时 WebGL 清屏渲染降至约 `690 clears/s`（约 `28.8 FPS`，基准端未限频空转约 `240 FPS` / `4.17ms`），键盘移动/交互立即恢复至约 `4531 clears/900ms`（约 `210 FPS`）。
+  - 聆听室坐在座椅中关闭耳机并实际播放测试 WAV，确认 `room === 'listening'`、`splitterCount === true`、六只音箱（`C / L / R / SL / SR / LFE`）全亮（`lit: true`），其中 `L-only` 段前左 `L`（`0.131/0.0918`）显著大于 `R`（`0.0173/0.0252`）、`R-only` 段前右对称翻转、`Surround` 反相段后环绕 `SL/SR`（`0.0786/0.0777`）显著高于前左右（`0.0447/0.0454`）且中置/低音清零（`C: 0, LFE: 0`）。
+  - 经典设置页切入第 1 帧即出现 `<h1>设置</h1>`（修复此前前 6 帧白屏延迟），高级设置折叠区 `aria-hidden` 与平滑展开正常，暂停态背景 Canvas 重绘降至 `0 fills/s`。
+- 本地环境仍未安装 `cargo` 与 `playwright`：完整原版经典/空间图形回归（`tests/desktop.cjs`、`tests/space.cjs`、`tests/online-desktop.cjs`）、实体显示卡/Windows 音频外设硬件听感、以及真实平台在线账号与会员流仍未在本机验证，不宣称为通过。Windows 安装包与原生 `cadenza-audio.exe` 构建由 GitHub Actions（`denza-build.yml`）在合并 `custom` 后验证并另记。

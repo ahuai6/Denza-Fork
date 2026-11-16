@@ -211,3 +211,20 @@
 .adv[aria-expanded='true'] svg {
   transform: rotate(180deg);
 }
+.advWrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--t-panel) var(--ease),
+    opacity var(--t-med) var(--ease);
+}
+.advWrap[data-open='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.advInner {
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+}
