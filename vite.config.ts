@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
     harness = mode === 'harness';
   const fonts = app ? `<script>window.CADENZA_FONTS='fonts/';</script>` : '';
   const csp = app
-    ? "default-src 'self' cadenza: data: blob:; img-src 'self' cadenza: data: blob: https:; media-src 'self' cadenza: blob:; script-src 'self' 'unsafe-inline' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' file:; font-src 'self' data: file:; connect-src 'self' cadenza: data: blob:"
+    ? "default-src 'self' cadenza: data: blob:; img-src 'self' cadenza: data: blob: https:; media-src 'self' cadenza: blob:; script-src 'self' file: 'unsafe-inline' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' file:; font-src 'self' data: file:; connect-src 'self' cadenza: data: blob:"
     : '';
   return {
     base: './',
@@ -30,20 +30,23 @@ export default defineConfig(({ mode }) => {
       react(),
       icuFoliaDataPlugin(),
       budouxBrowser,
-      ...(harness ? [] : [viteSingleFile({ removeViteModuleLoader: true })]),
+      ...(!app && !harness ? [viteSingleFile({ removeViteModuleLoader: true })] : []),
       {
         name: 'cadenza-html',
-        transformIndexHtml: (html: string) =>
-          html
+        transformIndexHtml: (html: string) => {
+          const out = html
             .replace('<!--CSP-->', csp ? `<meta http-equiv="Content-Security-Policy" content="${csp}">` : '')
-            .replace('<!--FONTS-->', fonts),
+            .replace('<!--FONTS-->', fonts);
+          // Desktop pages load over file://; strip crossorigin so Chromium treats local ES chunks as same-origin.
+          return app ? out.replace(/ crossorigin(?=[\s>])/g, '') : out;
+        },
       },
     ],
     worker: { format: 'es' },
     build: {
       outDir: app ? 'dist-app' : harness ? 'dist-harness' : 'dist-web',
       emptyOutDir: true,
-      assetsInlineLimit: 100000000,
+      assetsInlineLimit: app || harness ? 4096 : 100000000,
       chunkSizeWarningLimit: 100000,
       rollupOptions: {
         input: harness

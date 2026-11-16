@@ -39,6 +39,45 @@ jobs:
       - name: Package installer and portable app
         shell: bash
         run: npx electron-builder --win --x64 --publish never
+      - name: Report packaged size breakdown
+        shell: pwsh
+        run: |
+          node -e '
+            const fs = require("node:fs"), path = require("node:path");
+            const asar = require("@electron/asar");
+            const res = "release/win-unpacked/resources";
+            const asarPath = path.join(res, "app.asar");
+            const unpackedDir = path.join(res, "app.asar.unpacked");
+            const fmt = (b) => (b / 1048576).toFixed(2).padStart(8) + " MB";
+            const sumDir = (d) => {
+              let s = 0;
+              if (!fs.existsSync(d)) return 0;
+              for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+                const p = path.join(d, e.name);
+                s += e.isDirectory() ? sumDir(p) : e.isFile() ? fs.statSync(p).size : 0;
+              }
+              return s;
+            };
+            console.log("=== Installer & Portable ===");
+            for (const f of fs.readdirSync("release").filter((x) => x.endsWith(".exe"))) {
+              console.log(fmt(fs.statSync(path.join("release", f)).size), f);
+            }
+            console.log("=== Resources Summary ===");
+            console.log(fmt(fs.statSync(asarPath).size), "resources/app.asar");
+            console.log(fmt(sumDir(unpackedDir)), "resources/app.asar.unpacked");
+            console.log(fmt(sumDir(path.join(res, "models"))), "resources/models");
+            const groups = new Map();
+            for (const entry of asar.listPackage(asarPath, { isPack: false })) {
+              const rel = entry.replace(/^[/\\\\]/, "");
+              const st = asar.statFile(asarPath, rel);
+              if (!st || st.files) continue;
+              const parts = rel.split(/[/\\\\]/);
+              const k = parts[0] === "node_modules" ? parts.slice(0, parts[1]?.startsWith("@") ? 3 : 2).join("/") : parts[0];
+              groups.set(k, (groups.get(k) || 0) + Number(st.size || 0));
+            }
+            console.log("=== Top app.asar entries (logical bytes) ===");
+            for (const [k, v] of [...groups.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15)) console.log(fmt(v), k);
+          '
       - name: Check packaged modules and text runtime
         timeout-minutes: 2
         shell: pwsh

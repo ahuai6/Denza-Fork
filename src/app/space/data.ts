@@ -89,7 +89,7 @@ export function fromLibrary(
     lists.push({
       id: p.id,
       name: p.name,
-      note: labels.songs(p.remote ? p.remote.songs.length : ids.length),
+      note: labels.songs(p.remote ? (p.remote.songCount ?? p.remote.songs?.length ?? ids.length) : ids.length),
       ids,
       ...(p.remote ? { online: true, cover: p.remote.cover || null } : {}),
     });

@@ -362,6 +362,41 @@ describe('simplified Chinese metadata policy', () => {
     expect(result[2]).toEqual(tracks[2]);
     expect(tracks[0].title).toBe('English');
   });
+  it('reuses persisted developer tokens across restarts and refreshes them on 401', async () => {
+    const s = store();
+    const firstToken = token('WebPlayKid');
+    const freshToken = token('FreshKid');
+    let bundleFetches = 0;
+    let rejectFirst = false;
+    const fetcher = async (url: string, options: { headers: Record<string, string> }) => {
+      if (url.endsWith('/us/browse')) {
+        bundleFetches++;
+        return new Response('<script src="/assets/index~fixture.js"></script>');
+      }
+      if (url.endsWith('.js')) {
+        return new Response(rejectFirst ? freshToken : firstToken);
+      }
+      if (rejectFirst && options.headers.Authorization === 'Bearer ' + firstToken) {
+        return new Response('', { status: 401 });
+      }
+      return Response.json({ results: { songs: { data: [] } } });
+    };
+    const a1 = new AppleMusic(s, () => {}, fetcher);
+    await a1.search('query', 1);
+    expect(bundleFetches).toBe(1);
+    expect((s.data as { appleTokens?: unknown[] }).appleTokens?.length).toBe(1);
+
+    // New instance simulates app restart with persisted store data.
+    const a2 = new AppleMusic(s, () => {}, fetcher);
+    await a2.search('query', 1);
+    expect(bundleFetches).toBe(1);
+
+    // Expired/rejected cached token forces a refresh and updates persisted cache.
+    rejectFirst = true;
+    await a2.search('query', 1);
+    expect(bundleFetches).toBe(2);
+    expect(((s.data as { appleTokens?: { token: string }[] }).appleTokens || [])[0]?.token).toBe(freshToken);
+  });
 });
 
 describe('public-link metadata enrichment availability', () => {

@@ -23,7 +23,8 @@ export interface RemotePlaylist {
   artworkUrl?: string;
   cover?: string | null;
   updated: number;
-  songs: OnlineSong[];
+  songCount?: number;
+  songs?: OnlineSong[];
 }
 export interface MusicAccount {
   platform: MusicPlatform;
@@ -51,9 +52,16 @@ export interface OnlineState {
   folder: string;
   preferences?: { qualities: Record<string, string>; lyricsMode: string };
 }
+export interface DownloadProgress {
+  id: string;
+  status: DownloadJob['status'];
+  received: number;
+  total: number;
+}
 export interface OnlineApi {
   request(operation: string, args?: object): Promise<unknown>;
   onChanged(listener: (state: OnlineState) => void): () => void;
+  onProgress?(listener: (progress: DownloadProgress) => void): () => void;
 }
 export interface TranslationProvider {
   kind: 'openai' | 'compatible' | 'deepseek' | 'codex';

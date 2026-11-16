@@ -1,5 +1,16 @@
 // The library page: favourites and playlists (kept by the app), and songs, albums, artists and genres (from the files).
-import { memo, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { tx } from '../../i18n';
 import { Lib, type Track } from '../bridge';
 import { ui, lib, useStore, useIndex, fmtTime, keep, remember, toast, openMenu, match } from '../state';
@@ -9,11 +20,14 @@ import { Button, IconButton, Cover, Mosaic, Empty, Dropdown, Turn } from '../ui/
 import { LiveEq } from '../ui/LiveEq';
 import { quality } from '../ui/quality';
 import { useReorder } from '../ui/reorder';
+import { useVirtualWindow } from '../ui/useVirtualWindow';
 import { menuFor, run } from '../commands';
 import { askText } from './Modals';
 import { AlbumLine } from './AlbumLine';
 import s from './Library.module.css';
-import { OnlineMusic, SyncedPlaylists } from '../ui/OnlineMusic';
+
+const OnlineMusic = lazy(() => import('../ui/OnlineMusic').then((m) => ({ default: m.OnlineMusic })));
+const SyncedPlaylists = lazy(() => import('../ui/OnlineMusic').then((m) => ({ default: m.SyncedPlaylists })));
 
 export const SECTIONS: [string, string, string][] = [
   ['favorites', 's.favorites', 'heart'],
@@ -62,7 +76,11 @@ export function LibraryView() {
                 />
               )}
               {section === 'playlists' && <Playlists idx={idx} search={search} />}
-              {section === 'online' && <OnlineMusic />}
+              {section === 'online' && (
+                <Suspense fallback={null}>
+                  <OnlineMusic />
+                </Suspense>
+              )}
               {loaded && !folders.length && !tracks.length && section === 'songs' && <EmptyLibrary />}
               {section === 'songs' && !(loaded && !folders.length && !tracks.length) && (
                 <Songs
@@ -261,10 +279,9 @@ function PlayButtons({ ids, album }: { ids: string[]; album?: boolean }) {
     </>
   );
 }
-/** Bring the playing song's row into view, centred, and light it up for a moment. */
-export function locatePlaying() {
-  const row = document.querySelector<HTMLElement>('[role="list"] [data-cur="true"]');
-  if (!row) return;
+let virtualLocate: (() => void) | null = null;
+
+function flashPlayingRow(row: HTMLElement) {
   row.scrollIntoView({
     block: 'center',
     behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
@@ -277,10 +294,123 @@ export function locatePlaying() {
     row.dataset.flash = 'false';
   }, 1600);
 }
+
+/** Bring the playing song's row into view, centred, and light it up for a moment. */
+export function locatePlaying() {
+  const row = document.querySelector<HTMLElement>('[role="list"] [data-cur="true"]');
+  if (row) {
+    flashPlayingRow(row);
+    return;
+  }
+  virtualLocate?.();
+}
 /** A song's menu (commands/library.ts says what is in it). `playlist`: the playlist it is listed in, if any. */
 export function trackMenu(e: React.MouseEvent, t: Track, list: Track[], playlist?: string) {
   openMenu(e, menuFor({ kind: 'track', track: t, list, playlist }));
 }
+
+interface TrackRowProps {
+  t: Track;
+  index: number;
+  numbered?: boolean;
+  isCur: boolean;
+  isPlaying: boolean;
+  fav: boolean;
+  reorderable: boolean;
+  onDown: (e: React.PointerEvent<HTMLElement>, i: number) => void;
+  onPlay: (t: Track) => void;
+  onContext: (e: React.MouseEvent, t: Track) => void;
+}
+const TrackRow = memo(function TrackRow({
+  t,
+  index,
+  numbered,
+  isCur,
+  isPlaying,
+  fav,
+  reorderable,
+  onDown,
+  onPlay,
+  onContext,
+}: TrackRowProps) {
+  return (
+    <div
+      role="listitem"
+      className={s.row}
+      data-cur={isCur}
+      data-protected={t.protected}
+      tabIndex={0}
+      style={{ '--i': index } as CSSProperties}
+      onPointerDown={(e) => onDown(e, index)}
+      onDoubleClick={() => onPlay(t)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onPlay(t);
+      }}
+      onContextMenu={(e) => onContext(e, t)}
+    >
+      <span className={s.grip} aria-hidden="true">
+        {reorderable && <Icon n="grip" size={15} />}
+      </span>
+      <span className={s.lead}>
+        {numbered ? <span className={s.num}>{t.track || index + 1}</span> : <Cover k={t.cover} />}
+        {isCur && isPlaying ? (
+          <span className={s.playOver} style={{ opacity: 1 }}>
+            <LiveEq />
+          </span>
+        ) : (
+          !t.protected && (
+            <button type="button" className={s.playOver} aria-label={tx('s.play')} onClick={() => onPlay(t)}>
+              <Icon n="play" size={16} />
+            </button>
+          )
+        )}
+      </span>
+      <span className={s.main}>
+        <b>{t.title}</b>
+        <small>{t.artist || tx('s.unknownArtist')}</small>
+      </span>
+      <span className={s.album}>{t.album}</span>
+      <span className={s.badges}>
+        {t.protected ? (
+          <span className={s.noWords} title={tx('s.badge.protected')} aria-label={tx('s.badge.protected')}>
+            <Icon n="lock" size={14} />
+          </span>
+        ) : (
+          // (a song with no words yet: a quiet mark. What the file is — its format, its rate — is on the play page)
+          !(t.lrc || t.embedded || t.ttml || t.instrumental) && (
+            <span className={s.noWords} title={tx('s.badge.noLyrics')} aria-label={tx('s.badge.noLyrics')}>
+              <Icon n="lyrics" size={14} />
+            </span>
+          )
+        )}
+      </span>
+      {t.protected ? (
+        <span />
+      ) : (
+        <IconButton
+          n="plus"
+          size="sm"
+          label={tx('s.queue.add')}
+          className={s.hide + ' ' + s.qadd}
+          onClick={() => enqueue([t.id])}
+        />
+      )}
+      <IconButton
+        n="heart"
+        size="sm"
+        filled={fav}
+        on={fav}
+        data-fav=""
+        className={s.hide}
+        label={tx(fav ? 's.unfav' : 's.fav')}
+        onClick={() => Lib!.favorite(t.id, !fav)}
+      />
+      <span className={s.time}>{fmtTime(t.duration)}</span>
+      <IconButton n="more" size="sm" className={s.hide} label={tx('s.more')} onClick={(e) => onContext(e, t)} />
+    </div>
+  );
+});
+
 /** onReorder: the rows can be dragged into a new order (playlists). */
 export const TrackList = memo(function TrackList({
   tracks,
@@ -299,103 +429,76 @@ export const TrackList = memo(function TrackList({
     favs = useStore(lib, (x) => x.favorites);
   const fav = useMemo(() => new Set(favs), [favs]);
   const { shown, down, listProps } = useReorder(tracks, onReorder && ((list) => onReorder(list.map((t) => t.id))));
-  const play = (t: Track) => {
-    if (t.protected) {
-      toast(tx('s.protectedHelp'), 4200);
-      return;
-    }
-    const ids = shown.map((x) => x.id);
-    playIds(ids, ids.indexOf(t.id));
-  };
+  const ids = useMemo(() => shown.map((x) => x.id), [shown]);
+  const win = useVirtualWindow({
+    count: shown.length,
+    rowHeight: 72,
+    gap: 2,
+    threshold: 120,
+    enabled: !onReorder,
+  });
+  const setListRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      win.ref.current = node;
+      const lpRef = (listProps as { ref?: React.Ref<HTMLDivElement> }).ref;
+      if (typeof lpRef === 'function') lpRef(node);
+      else if (lpRef && typeof lpRef === 'object') (lpRef as { current: HTMLDivElement | null }).current = node;
+    },
+    [listProps, win.ref],
+  );
+  const play = useCallback(
+    (t: Track) => {
+      if (t.protected) {
+        toast(tx('s.protectedHelp'), 4200);
+        return;
+      }
+      playIds(ids, ids.indexOf(t.id));
+    },
+    [ids],
+  );
+  const onContext = useCallback((e: React.MouseEvent, t: Track) => trackMenu(e, t, shown, playlist), [shown, playlist]);
+  useEffect(() => {
+    if (!win.active || !cur) return;
+    const idx = ids.indexOf(cur);
+    if (idx < 0) return;
+    const handler = () => {
+      win.scrollToIndex(idx);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const el = document.querySelector<HTMLElement>('[role="list"] [data-cur="true"]');
+          if (el) flashPlayingRow(el);
+        }),
+      );
+    };
+    virtualLocate = handler;
+    return () => {
+      if (virtualLocate === handler) virtualLocate = null;
+    };
+  }, [win.active, win.scrollToIndex, ids, cur]);
+
   return (
-    <div className={s.tracks + ' stagger'} role="list" data-reorder={!!onReorder} {...listProps}>
-      {shown.map((t, i) => {
-        const on = fav.has(t.id),
-          isCur = t.id === cur;
+    <div className={s.tracks + ' stagger'} role="list" data-reorder={!!onReorder} {...listProps} ref={setListRef}>
+      {win.topPad > 0 && <div style={{ height: win.topPad }} aria-hidden="true" />}
+      {shown.slice(win.start, win.end).map((t, offset) => {
+        const i = win.start + offset;
+        const isCur = t.id === cur;
         return (
-          <div
+          <TrackRow
             key={t.id}
-            role="listitem"
-            className={s.row}
-            data-cur={isCur}
-            data-protected={t.protected}
-            tabIndex={0}
-            style={{ '--i': i } as React.CSSProperties}
-            onPointerDown={(e) => down(e, i)}
-            onDoubleClick={() => play(t)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') play(t);
-            }}
-            onContextMenu={(e) => trackMenu(e, t, shown, playlist)}
-          >
-            <span className={s.grip} aria-hidden="true">
-              {onReorder && <Icon n="grip" size={15} />}
-            </span>
-            <span className={s.lead}>
-              {numbered ? <span className={s.num}>{t.track || i + 1}</span> : <Cover k={t.cover} />}
-              {isCur && playing ? (
-                <span className={s.playOver} style={{ opacity: 1 }}>
-                  <LiveEq />
-                </span>
-              ) : (
-                !t.protected && (
-                  <button type="button" className={s.playOver} aria-label={tx('s.play')} onClick={() => play(t)}>
-                    <Icon n="play" size={16} />
-                  </button>
-                )
-              )}
-            </span>
-            <span className={s.main}>
-              <b>{t.title}</b>
-              <small>{t.artist || tx('s.unknownArtist')}</small>
-            </span>
-            <span className={s.album}>{t.album}</span>
-            <span className={s.badges}>
-              {t.protected ? (
-                <span className={s.noWords} title={tx('s.badge.protected')} aria-label={tx('s.badge.protected')}>
-                  <Icon n="lock" size={14} />
-                </span>
-              ) : (
-                // (a song with no words yet: a quiet mark. What the file is — its format, its rate — is on the play page)
-                !(t.lrc || t.embedded || t.ttml || t.instrumental) && (
-                  <span className={s.noWords} title={tx('s.badge.noLyrics')} aria-label={tx('s.badge.noLyrics')}>
-                    <Icon n="lyrics" size={14} />
-                  </span>
-                )
-              )}
-            </span>
-            {t.protected ? (
-              <span />
-            ) : (
-              <IconButton
-                n="plus"
-                size="sm"
-                label={tx('s.queue.add')}
-                className={s.hide + ' ' + s.qadd}
-                onClick={() => enqueue([t.id])}
-              />
-            )}
-            <IconButton
-              n="heart"
-              size="sm"
-              filled={on}
-              on={on}
-              data-fav=""
-              className={s.hide}
-              label={tx(on ? 's.unfav' : 's.fav')}
-              onClick={() => Lib!.favorite(t.id, !on)}
-            />
-            <span className={s.time}>{fmtTime(t.duration)}</span>
-            <IconButton
-              n="more"
-              size="sm"
-              className={s.hide}
-              label={tx('s.more')}
-              onClick={(e) => trackMenu(e, t, shown, playlist)}
-            />
-          </div>
+            t={t}
+            index={i}
+            numbered={numbered}
+            isCur={isCur}
+            isPlaying={isCur && playing}
+            fav={fav.has(t.id)}
+            reorderable={!!onReorder}
+            onDown={down}
+            onPlay={play}
+            onContext={onContext}
+          />
         );
       })}
+      {win.bottomPad > 0 && <div style={{ height: win.bottomPad }} aria-hidden="true" />}
     </div>
   );
 });
@@ -450,7 +553,9 @@ function Playlists({ idx, search }: { idx: Idx; search: string }) {
         </Button>
       </div>
       {tab === 'synced' ? (
-        <SyncedPlaylists />
+        <Suspense fallback={null}>
+          <SyncedPlaylists />
+        </Suspense>
       ) : (
         <div className={s.cards + ' stagger'}>
           <button type="button" className={s.card + ' ' + s.newCard} onClick={create}>

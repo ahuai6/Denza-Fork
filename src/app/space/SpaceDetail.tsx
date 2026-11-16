@@ -1,13 +1,14 @@
 // What you click in the space opens here, where you stand (the view never moves for it): an album or a playlist opened
 // out into its songs, or one song; with everything the classic library offers for them — play from any song, add to
 // the queue, favourites, playlists made, renamed, deleted, songs added and taken out.
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { tx } from '../../i18n';
 import { Lib, type Track } from '../bridge';
 import { lib, ui, useStore, useIndex, fmtTime } from '../state';
 import { Icon } from '../ui/icons';
-import { SyncedPlaylists } from '../ui/OnlineMusic';
 import { Cover } from '../ui/kit';
+
+const SyncedPlaylists = lazy(() => import('../ui/OnlineMusic').then((m) => ({ default: m.SyncedPlaylists })));
 import { player, playIds } from '../playback/player';
 import { addToPlaylist, renamePlaylist, run, type Target } from '../commands';
 import { ts } from './i18n';
@@ -97,14 +98,23 @@ export function SpaceDetail({ detail, onClose }: { detail: Detail; onClose: () =
           <div>
             <small className={s.eye}>{ts('kind.list')}</small>
             <b className={s.dtitle}>{remotePlaylist.name}</b>
-            <small>{tx('s.tracks', { n: remotePlaylist.remote.songs.length })}</small>
+            <small>
+              {tx('s.tracks', {
+                n:
+                  remotePlaylist.remote.songCount ??
+                  remotePlaylist.remote.songs?.length ??
+                  remotePlaylist.tracks.length,
+              })}
+            </small>
           </div>
           <button className={s.x} onClick={onClose} aria-label={ts('close')}>
             ✕
           </button>
         </header>
         <div className={s.remoteBody}>
-          <SyncedPlaylists playlistId={remotePlaylist.id} embedded />
+          <Suspense fallback={null}>
+            <SyncedPlaylists playlistId={remotePlaylist.id} embedded />
+          </Suspense>
         </div>
       </section>
     );

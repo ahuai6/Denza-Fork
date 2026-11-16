@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { tx } from '../../i18n';
 import {
   translationLines,
@@ -12,8 +12,56 @@ import { dialogs } from '../actions/dialogs';
 import { request, jobId } from '../online/state';
 import type { TranslationProvider } from '../online/types';
 import { OnlineDialog, SearchSongs } from './OnlineMusic';
+import { useVirtualWindow } from './useVirtualWindow';
 import { Button, Dropdown, Note } from './kit';
 import s from './OnlineMusic.module.css';
+
+interface TranslationRowProps {
+  id: string;
+  text: string;
+  value: string;
+  isLocked: boolean;
+  busy: boolean;
+  statusLabel: string;
+  lockLabel: string;
+  onToggleLock: (id: string, checked: boolean) => void;
+  onChangeValue: (id: string, value: string) => void;
+}
+const TranslationRow = memo(function TranslationRow({
+  id,
+  text,
+  value,
+  isLocked,
+  busy,
+  statusLabel,
+  lockLabel,
+  onToggleLock,
+  onChangeValue,
+}: TranslationRowProps) {
+  return (
+    <div className={s.preview}>
+      <div className={s.toolbar}>
+        <b>{text}</b>
+        <label>
+          <input
+            type="checkbox"
+            checked={isLocked}
+            aria-label={lockLabel}
+            onChange={(e) => onToggleLock(id, e.target.checked)}
+          />
+          {lockLabel}
+        </label>
+      </div>
+      <textarea
+        aria-label={text}
+        disabled={isLocked || busy}
+        value={value}
+        onChange={(e) => onChangeValue(id, e.target.value)}
+      />
+      <small>{statusLabel}</small>
+    </div>
+  );
+});
 
 interface Props {
   source: string;
@@ -72,6 +120,24 @@ export function TranslationEditor({ source, song, apply, close }: Props) {
     () => [...readTranslationPaste(paste), ...extra].map((f, index) => ({ ...f, index })),
     [paste, extra],
   );
+  const lockedSet = useMemo(() => new Set(locked), [locked]);
+  const matchMap = useMemo(() => new Map(matches.map((m) => [m.id, m])), [matches]);
+  const selectedFragmentSet = useMemo(() => new Set(selectedFragments), [selectedFragments]);
+  const lineById = useMemo(() => new Map(lines.map((l) => [l.id, l])), [lines]);
+  const fragmentByIndex = useMemo(() => new Map(fragments.map((f) => [f.index, f.text])), [fragments]);
+  const translationWin = useVirtualWindow({
+    count: lines.length,
+    rowHeight: 132,
+    gap: 12,
+    threshold: 100,
+  });
+  const toggleLock = useCallback((id: string, checked: boolean) => {
+    setLocked((v) => (checked ? (v.includes(id) ? v : [...v, id]) : v.filter((x) => x !== id)));
+  }, []);
+  const changeValue = useCallback((id: string, value: string) => {
+    setValues((v) => (v[id] === value ? v : { ...v, [id]: value }));
+    setDirty(true);
+  }, []);
   const act = async (fn: () => Promise<void>) => {
     setBusy(true);
     setStatus('');
@@ -96,17 +162,16 @@ export function TranslationEditor({ source, song, apply, close }: Props) {
     const previous = suggested.current;
     const next = Object.fromEntries(
       proposals
-        .filter((m) => !locked.includes(m.id))
-        .map((m) => [m.id, m.fragments.map((i) => fragments.find((f) => f.index === i)?.text || '').join(' ')]),
+        .filter((m) => !lockedSet.has(m.id))
+        .map((m) => [m.id, m.fragments.map((i) => fragmentByIndex.get(i) || '').join(' ')]),
     );
     suggested.current = next;
     setValues((old) => {
-      const values = { ...old };
+      const updated = { ...old };
       // Re-matching a different paste must not leave obsolete automatic suggestions in unmatched rows.
       for (const [id, value] of Object.entries(previous))
-        if (!locked.includes(id) && old[id] === value)
-          values[id] = lines.find((line) => line.id === id)?.translation || '';
-      return { ...values, ...next };
+        if (!lockedSet.has(id) && old[id] === value) updated[id] = lineById.get(id)?.translation || '';
+      return { ...updated, ...next };
     });
     setDirty(true);
   };
@@ -123,7 +188,7 @@ export function TranslationEditor({ source, song, apply, close }: Props) {
             language,
             context,
             lines: lines.map(({ id, text }) => ({ id, text })),
-            wanted: lines.filter((l) => !locked.includes(l.id)).map((l) => l.id),
+            wanted: lines.filter((l) => !lockedSet.has(l.id)).map((l) => l.id),
             locked: Object.fromEntries(locked.map((id) => [id, values[id]])),
           },
         });
@@ -340,7 +405,7 @@ export function TranslationEditor({ source, song, apply, close }: Props) {
                         aria-pressed={l.id === selectedLine}
                         onClick={() => {
                           setSelectedLine(l.id);
-                          setSelectedFragments(matches.find((m) => m.id === l.id)?.fragments || []);
+                          setSelectedFragments(matchMap.get(l.id)?.fragments || []);
                         }}
                       >
                         {l.text}
@@ -352,7 +417,7 @@ export function TranslationEditor({ source, song, apply, close }: Props) {
                       <label key={f.index}>
                         <input
                           type="checkbox"
-                          checked={selectedFragments.includes(f.index)}
+                          checked={selectedFragmentSet.has(f.index)}
                           onChange={(e) =>
                             setSelectedFragments((v) =>
                               e.target.checked ? [...v, f.index] : v.filter((i) => i !== f.index),
@@ -365,10 +430,10 @@ export function TranslationEditor({ source, song, apply, close }: Props) {
                   </div>
                 </div>
                 <Button
-                  disabled={!selectedLine || locked.includes(selectedLine)}
+                  disabled={!selectedLine || lockedSet.has(selectedLine)}
                   onClick={() => {
                     const retained = matches.filter(
-                      (m) => m.id !== selectedLine && !m.fragments.some((i) => selectedFragments.includes(i)),
+                      (m) => m.id !== selectedLine && !m.fragments.some((i) => selectedFragmentSet.has(i)),
                     );
                     const next = selectedFragments.length
                       ? [
@@ -381,7 +446,7 @@ export function TranslationEditor({ source, song, apply, close }: Props) {
                         ]
                       : retained;
                     const displaced = matches
-                      .filter((m) => m.id !== selectedLine && m.fragments.some((i) => selectedFragments.includes(i)))
+                      .filter((m) => m.id !== selectedLine && m.fragments.some((i) => selectedFragmentSet.has(i)))
                       .map((m) => m.id);
                     setValues((v) => ({
                       ...v,
@@ -397,39 +462,28 @@ export function TranslationEditor({ source, song, apply, close }: Props) {
           </section>
           <section className={s.stack}>
             {status && <Note>{status}</Note>}
-            <div className={s.translation}>
-              {lines.map((l) => (
-                <div key={l.id} className={s.preview}>
-                  <div className={s.toolbar}>
-                    <b>{l.text}</b>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={locked.includes(l.id)}
-                        aria-label={tx('tr.lock')}
-                        onChange={(e) =>
-                          setLocked((v) => (e.target.checked ? [...v, l.id] : v.filter((id) => id !== l.id)))
-                        }
-                      />
-                      {tx('tr.lock')}
-                    </label>
-                  </div>
-                  <textarea
-                    aria-label={l.text}
-                    disabled={locked.includes(l.id) || busy}
-                    value={values[l.id] || ''}
-                    onChange={(e) => {
-                      setValues({ ...values, [l.id]: e.target.value });
-                      setDirty(true);
-                    }}
+            <div className={s.translation} ref={translationWin.ref}>
+              {translationWin.topPad > 0 && <div style={{ height: translationWin.topPad }} aria-hidden="true" />}
+              {lines.slice(translationWin.start, translationWin.end).map((l) => {
+                const match = matchMap.get(l.id);
+                const val = values[l.id] || '';
+                const statusLabel = match ? tx('tr.' + match.evidence) : tx(val ? 'tr.draft' : 'tr.unmatched');
+                return (
+                  <TranslationRow
+                    key={l.id}
+                    id={l.id}
+                    text={l.text}
+                    value={val}
+                    isLocked={lockedSet.has(l.id)}
+                    busy={busy}
+                    statusLabel={statusLabel}
+                    lockLabel={tx('tr.lock')}
+                    onToggleLock={toggleLock}
+                    onChangeValue={changeValue}
                   />
-                  <small>
-                    {matches.find((m) => m.id === l.id)
-                      ? tx('tr.' + matches.find((m) => m.id === l.id)!.evidence)
-                      : tx(values[l.id] ? 'tr.draft' : 'tr.unmatched')}
-                  </small>
-                </div>
-              ))}
+                );
+              })}
+              {translationWin.bottomPad > 0 && <div style={{ height: translationWin.bottomPad }} aria-hidden="true" />}
             </div>
             <div className={s.toolbar}>
               {busy && task.current && (

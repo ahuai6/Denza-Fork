@@ -35,6 +35,69 @@ import { glyphFrame } from './glyphs';
 
 const byZ = (a: Effect, b: Effect) => (a.z ?? 0) - (b.z ?? 0);
 const LAYER = makeCanvas(16, 16) as HTMLCanvasElement;
+const SHADE = makeCanvas(16, 16) as HTMLCanvasElement;
+let shadeW = 0,
+  shadeH = 0;
+
+function getShadeCanvas(W: number, H: number): HTMLCanvasElement {
+  if (shadeW !== W || shadeH !== H) {
+    shadeW = W;
+    shadeH = H;
+    SHADE.width = Math.max(1, Math.round(W));
+    SHADE.height = Math.max(1, Math.round(H));
+    const sg = SHADE.getContext('2d')!;
+    const R = Math.hypot(W * 1.2, H * 0.9) * 0.5;
+    const sh = sg.createRadialGradient(W * 0.3, H * 0.55, 0, W * 0.3, H * 0.55, R);
+    sh.addColorStop(0, 'rgba(8,6,14,0.12)');
+    sh.addColorStop(1, 'rgba(8,6,14,0.46)');
+    sg.clearRect(0, 0, SHADE.width, SHADE.height);
+    sg.fillStyle = sh;
+    sg.fillRect(0, 0, W, H);
+  }
+  return SHADE;
+}
+
+type LayerKey = 'backdrop' | 'world-back' | 'world-front' | 'foreground' | 'screen';
+let cachedFxSig = '';
+let cachedFxCount = -1;
+let cachedLayers: Record<LayerKey, Effect[]> | null = null;
+function getLayerEffects(
+  bgStyle: string,
+  bgFx: Effect,
+  lite: boolean,
+  fx: Record<string, boolean>,
+): Record<LayerKey, Effect[]> {
+  const all = effects('effect');
+  let sig = `${bgStyle}|${lite ? 1 : 0}`;
+  for (let i = 0; i < all.length; i++) sig += fx[all[i].id] ? '|1' : '|0';
+  if (cachedLayers && cachedFxCount === all.length && cachedFxSig === sig) return cachedLayers;
+  cachedFxCount = all.length;
+  cachedFxSig = sig;
+  const backdrop = all.filter(
+    (e) => e.layer === 'backdrop' && (fx[e.id] || e.id === 'mv') && !(lite && LITE_OFF.has(e.id)),
+  );
+  if (bgFx.front) {
+    backdrop.push({
+      id: bgFx.id + ':front',
+      label: '',
+      layer: 'backdrop',
+      kind: 'effect',
+      z: bgFx.frontZ ?? 0,
+      draw: bgFx.front,
+    });
+  }
+  backdrop.sort(byZ);
+  const pick = (layer: Exclude<LayerKey, 'backdrop'>) =>
+    all.filter((x) => x.layer === layer && (fx[x.id] || alwaysOn(x)) && !(lite && LITE_OFF.has(x.id))).sort(byZ);
+  cachedLayers = {
+    backdrop,
+    'world-back': pick('world-back'),
+    'world-front': pick('world-front'),
+    foreground: pick('foreground'),
+    screen: pick('screen'),
+  };
+  return cachedLayers;
+}
 
 /** Where a frame's time goes, layer by layer (the page's own time: what the canvas or the GPU does after is seen in the
  *  frame rate). Collected only while on (the settings' performance overlay). */
@@ -146,19 +209,8 @@ export function drawFrame(g: Ctx, f: RenderFrame, o: DrawOptions) {
     sameAsAmbient = st.bgStyle === 'cover';
   // (lite: the effects that read the whole frame again or blur every frame are left out)
   const lite = gfx() === 'lite',
-    bdEffects = effects('effect').filter(
-      (e) => e.layer === 'backdrop' && (st.fx[e.id] || e.id === 'mv') && !(lite && LITE_OFF.has(e.id)),
-    );
-  if (bgFx.front)
-    bdEffects.push({
-      id: bgFx.id + ':front',
-      label: '',
-      layer: 'backdrop',
-      kind: 'effect',
-      z: bgFx.frontZ ?? 0,
-      draw: bgFx.front,
-    });
-  bdEffects.sort(byZ);
+    layerEffects = getLayerEffects(st.bgStyle, bgFx, lite, st.fx),
+    bdEffects = layerEffects.backdrop;
   const inBackdrop = (c: Ctx) => {
     c.save();
     c.translate(W / 2, H / 2);
@@ -231,14 +283,9 @@ export function drawFrame(g: Ctx, f: RenderFrame, o: DrawOptions) {
   if (view < 0.999 && !f.offline) {
     const k = 1 - sstep(view);
     if (k > 0.003) {
-      const R = Math.hypot(W * 1.2, H * 0.9) * 0.5,
-        sh = g.createRadialGradient(W * 0.3, H * 0.55, 0, W * 0.3, H * 0.55, R);
-      sh.addColorStop(0, 'rgba(8,6,14,0.12)');
-      sh.addColorStop(1, 'rgba(8,6,14,0.46)');
       g.save();
       g.globalAlpha = k;
-      g.fillStyle = sh;
-      g.fillRect(0, 0, W, H);
+      g.drawImage(getShadeCanvas(W, H), 0, 0, W, H);
       g.restore();
     }
   }
@@ -292,10 +339,11 @@ export function drawFrame(g: Ctx, f: RenderFrame, o: DrawOptions) {
     if (wk < 1) for (const v of f.vis) v.o *= wk;
   }
   const world = (layer: 'world-back' | 'world-front' | 'foreground' | 'screen', fr: RenderFrame = f) => {
-    for (const e of effects('effect')
-      .filter((x) => x.layer === layer && (st.fx[x.id] || alwaysOn(x)) && !(lite && LITE_OFF.has(x.id)))
-      .sort(byZ))
+    const list = layerEffects[layer];
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
       e.draw(g, fr, { bd, params: paramsFor(e, st.fxp?.[e.id]) });
+    }
   };
   if (view > 0.001) {
     mark('backdrop');

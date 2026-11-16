@@ -2,13 +2,12 @@
 // half of the interface: it keeps the logic half (state, actions, playback, the bridge) exactly as the classic pages do.
 // The scene reads the library and the song playing through bind.ts, and plays through it; the settings page is React,
 // opened by the scene (the gear, the , key, the south chapel's sculptures).
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { boot } from '../actions/boot';
 import { ensureFont } from '../../engine';
 import { createWorld } from './world';
 import { createBind, isNight } from './bind';
 import { hudHtml } from './hud';
-import { SpaceSettings } from './SpaceSettings';
 import { PlayerExtras, SpacePanel, WinButtons, type Panel } from './SpacePanels';
 import { SpaceDetail, type Detail } from './SpaceDetail';
 import { ContextMenu, Toast } from '../ui/kit';
@@ -19,7 +18,7 @@ import { lang as langStore } from '../../i18n';
 import { useStore, settings, ui, openMenu, lib } from '../state';
 import './space.css';
 import s from './SpaceShell.module.css';
-import { OnlineDialog, OnlineMusic } from '../ui/OnlineMusic';
+import { OnlineDialog } from '../ui/OnlineDialog';
 import { Button } from '../ui/kit';
 import { useOnlineSurface } from '../ui/OnlineSurface';
 import { dialogs } from '../actions/dialogs';
@@ -27,6 +26,9 @@ import { DialogOwner } from '../ui/DialogOwner';
 import type { PlaylistSource } from './playlistRoom';
 import { tx } from '../../i18n';
 import { request } from '../online/state';
+
+const OnlineMusic = lazy(() => import('../ui/OnlineMusic').then((m) => ({ default: m.OnlineMusic })));
+const SpaceSettings = lazy(() => import('./SpaceSettings').then((m) => ({ default: m.SpaceSettings })));
 
 // every face the scene's textures and the HUD draw with, loaded before the first texture is drawn
 const FACES: [string, string][] = [
@@ -166,7 +168,9 @@ export function SpaceShell() {
       )}
       {ready && cfg.open && (
         <DialogOwner>
-          <SpaceSettings section={cfg.section} onClose={close} />
+          <Suspense fallback={null}>
+            <SpaceSettings section={cfg.section} onClose={close} />
+          </Suspense>
         </DialogOwner>
       )}
       {ready && !mini && (
@@ -202,7 +206,9 @@ export function SpaceShell() {
       )}
       {onlineOpen && (
         <OnlineDialog title={tx('on.title')} close={() => setView(null)}>
-          <OnlineMusic />
+          <Suspense fallback={null}>
+            <OnlineMusic />
+          </Suspense>
         </OnlineDialog>
       )}
       {ready && (

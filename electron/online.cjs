@@ -7,6 +7,7 @@ const { Translator, CodexText } = require('./translation-service.cjs');
 const { AppleMusic, appleFetch } = require('./apple-music.cjs');
 const { LyricsFlowAudio } = require('./online/lyricsflow-audio.cjs');
 const { createPublicResolver } = require('./online/public-resolvers.cjs');
+const { closeSdkWorkers } = require('./online/sdk-transport.cjs');
 
 // Fetch the complete snapshot before changing any saved playlist. Repeated/partial pages never erase the old copy.
 async function collectPages(read, signal) {
@@ -69,6 +70,10 @@ async function start(ipcMain, getWin, library) {
         jobs: downloads.view(),
       });
   };
+  const publishProgress = (progress) => {
+    const win = getWin();
+    if (win && !win.isDestroyed()) win.webContents.send('online:progress', progress);
+  };
   const downloads = new Downloads(
     store,
     platforms,
@@ -76,6 +81,7 @@ async function start(ipcMain, getWin, library) {
     publish,
     (url, options) => fetcher(url, { signal: options.signal, headers: options.headers }),
     fetcher,
+    publishProgress,
   );
   const codex = new CodexText(app.getPath('userData'), (url) => shell.openExternal(url));
   const translator = new Translator(store, codex);
@@ -159,10 +165,29 @@ async function start(ipcMain, getWin, library) {
         if (!uid) throw Error('Sign in first');
         const lists = await collectPages((p) => platforms.page(platform, 'lists', '', p, signal), signal);
         if (lists.length > 300) throw Error('Too many playlists to sync at once');
-        const snapshot = [];
-        for (const list of lists) {
-          const songs = await collectPages((p) => platforms.page(platform, 'songs', list.id, p, signal), signal);
-          snapshot.push({ ...list, songs });
+        const snapshot = new Array(lists.length);
+        const batchControl = new AbortController();
+        const batchSignal = signal ? AbortSignal.any([signal, batchControl.signal]) : batchControl.signal;
+        let cursor = 0;
+        const concurrency = Math.min(4, lists.length);
+        const worker = async () => {
+          while (true) {
+            batchSignal.throwIfAborted();
+            const index = cursor++;
+            if (index >= lists.length) return;
+            const list = lists[index];
+            const songs = await collectPages(
+              (p) => platforms.page(platform, 'songs', list.id, p, batchSignal),
+              batchSignal,
+            );
+            snapshot[index] = { ...list, songs };
+          }
+        };
+        try {
+          await Promise.all(Array.from({ length: concurrency }, worker));
+        } catch (error) {
+          batchControl.abort();
+          throw error;
         }
         signal.throwIfAborted();
         if (store.credential(platform).uid !== uid) throw Error('Account changed while syncing');
@@ -192,6 +217,10 @@ async function start(ipcMain, getWin, library) {
     playlistCover: ({ id }) => {
       if (typeof id !== 'string' || id.length > 100) throw Error('Invalid playlist');
       return library.cachePlaylistCover(id);
+    },
+    playlistSongs: ({ id }) => {
+      if (typeof id !== 'string' || id.length > 100) throw Error('Invalid playlist');
+      return library.remoteSongs(id);
     },
     downloadAction: ({ id, action }) => downloads.action(id, action),
     lyrics: ({ key, jobId }) => job(jobId, (signal) => platforms.lyrics(track(key), signal)),
@@ -225,6 +254,9 @@ async function start(ipcMain, getWin, library) {
       apple.close();
       codex.close();
       await downloads.close();
+      await closeSdkWorkers();
+      await store.close();
+      await library.flushRemotePlaylists?.();
     },
   };
 }

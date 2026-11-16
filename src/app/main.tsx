@@ -5,8 +5,6 @@ import './styles/base.css';
 import './words';
 import { createRoot } from 'react-dom/client';
 import { D, Lib } from './bridge';
-import { Shell } from './views/Shell';
-import { WebApp } from './views/workshop/WebApp';
 
 const root = createRoot(document.getElementById('root')!);
 (async () => {
@@ -16,5 +14,11 @@ const root = createRoot(document.getElementById('root')!);
     root.render(<SpaceShell />);
     return;
   }
-  root.render(Lib ? <Shell /> : <WebApp />);
+  if (Lib) {
+    const { Shell } = await import('./views/Shell');
+    root.render(<Shell />);
+    return;
+  }
+  const { WebApp } = await import('./views/workshop/WebApp');
+  root.render(<WebApp />);
 })();

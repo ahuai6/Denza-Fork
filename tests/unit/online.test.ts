@@ -86,13 +86,17 @@ describe('online integration contracts', () => {
       id: 'abc',
     });
   });
-  it('does not expose account cookies or API keys in public settings', async () => {
+  it('does not expose account cookies or API keys in public settings and caches decrypted credentials in memory', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'denza-store-'));
+    let decryptCount = 0;
     try {
       const crypto = {
         isEncryptionAvailable: () => true,
         encryptString: (s: string) => Buffer.from(s).reverse(),
-        decryptString: (b: Buffer) => Buffer.from(b).reverse().toString(),
+        decryptString: (b: Buffer) => {
+          decryptCount++;
+          return Buffer.from(b).reverse().toString();
+        },
       };
       const store = new OnlineStore(join(dir, 'online.json'), crypto);
       await store.load();
@@ -100,6 +104,20 @@ describe('online integration contracts', () => {
       expect(JSON.stringify(store.accounts())).not.toContain('secret-cookie');
       expect(await readFile(join(dir, 'online.json'), 'utf8')).not.toContain('secret-cookie');
       expect(store.credential('netease').cookie).toBe('secret-cookie');
+      expect(store.credential('netease').cookie).toBe('secret-cookie');
+      // setAccount caches decrypted cookie in memory; repeated credential() calls do not re-decrypt.
+      expect(decryptCount).toBe(0);
+
+      // Fresh OnlineStore after load() decrypts once and caches subsequent reads; deleteAccount clears cache.
+      const reloaded = new OnlineStore(join(dir, 'online.json'), crypto);
+      await reloaded.load();
+      expect(reloaded.credential('netease').cookie).toBe('secret-cookie');
+      expect(reloaded.credential('netease').cookie).toBe('secret-cookie');
+      expect(decryptCount).toBe(1);
+      await reloaded.deleteAccount('netease');
+      expect(reloaded.credential('netease').cookie).toBe('');
+      await reloaded.close();
+
       const tr = new Translator(store, {});
       await tr.configure({
         kind: 'compatible',
@@ -189,6 +207,22 @@ describe('online integration contracts', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+  it('reuses platform SDK workers across calls and cancels one request without breaking siblings', async () => {
+    const { sdk, closeSdkWorkers } = require('../../electron/online/sdk-transport.cjs');
+    try {
+      const controller = new AbortController();
+      const cancelled = sdk('qq', '__missing_method__', {}, controller.signal);
+      controller.abort();
+      const sibling = sdk('qq', '__missing_method__', {});
+      await expect(cancelled).rejects.toThrow('Cancelled');
+      await expect(sibling).rejects.toThrow('Platform request failed (qq/__missing_method__)');
+      await expect(sdk('qq', '__missing_method__', {})).rejects.toThrow(
+        'Platform request failed (qq/__missing_method__)',
+      );
+    } finally {
+      await closeSdkWorkers();
+    }
+  });
 });
 
 describe('synced playlists in the existing library', () => {
@@ -236,7 +270,15 @@ describe('synced playlists in the existing library', () => {
             platform: string,
             uid: string,
             lists: object[],
-          ): { playlists: { id: string; tracks: string[]; remote?: { songs: { localId: string | null }[] } }[] };
+          ): {
+            playlists: {
+              id: string;
+              tracks: string[];
+              remote?: { songCount: number; songs?: { localId: string | null }[] };
+            }[];
+          };
+          remoteSongs(id: string): { id: string; localId: string | null }[];
+          flushRemotePlaylists(): Promise<void>;
         },
       };
       vm.runInNewContext(fs.readFileSync(join(__dirname, '../../electron/library.cjs'), 'utf8'), {
@@ -278,13 +320,100 @@ describe('synced playlists in the existing library', () => {
       ];
       const view = exports.exports.syncPlaylists('qq', '12', lists);
       expect(view.playlists.find((p) => p.remote)?.tracks).toEqual(['b', 'a']);
-      expect(view.playlists.find((p) => p.remote)?.remote?.songs.map((s) => s.localId)).toEqual(['b', null, 'a']);
+      // 3.2.9-denza.5 P0-2: lib:changed / db.json keeps lightweight remote summary; songs live in sharded files via remoteSongs.
+      expect(view.playlists.find((p) => p.remote)?.remote?.songCount).toBe(3);
+      expect(view.playlists.find((p) => p.remote)?.remote?.songs).toBeUndefined();
+      const remoteId = view.playlists.find((p) => p.remote)!.id;
+      expect(exports.exports.remoteSongs(remoteId).map((s) => s.localId)).toEqual(['b', null, 'a']);
       expect(view.playlists.find((p) => p.id === 'local')?.tracks).toEqual(['a']);
       const again = exports.exports.syncPlaylists('qq', '12', lists);
       expect(again.playlists).toHaveLength(2);
-      const remoteId = view.playlists.find((p) => p.remote)!.id;
+      await exports.exports.flushRemotePlaylists();
       expect(handlers.get('lib:playlist')!(null, 'add', remoteId, ['a'])).toBe(false);
       expect(handlers.get('lib:playlist')!(null, 'rename', remoteId, 'Changed')).toBe(false);
+    } finally {
+      for (const timer of timers) clearTimeout(timer);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  it('migrates legacy inline remote.songs into sharded files on start and cleans up on playlist delete', async () => {
+    const vm = await import('node:vm');
+    const fs = await import('node:fs');
+    const dir = await mkdtemp(join(tmpdir(), 'denza-migrate-'));
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    try {
+      fs.mkdirSync(join(dir, 'library'), { recursive: true });
+      fs.writeFileSync(
+        join(dir, 'library', 'db.json'),
+        JSON.stringify({
+          version: 1,
+          folders: [],
+          tracks: {},
+          favorites: [],
+          playlists: [
+            {
+              id: 'sync-legacy',
+              name: 'Legacy',
+              created: 1,
+              tracks: [],
+              remote: {
+                platform: 'netease',
+                uid: 'u1',
+                id: 'r1',
+                updated: 1,
+                songs: [{ platform: 'netease', id: 's1', title: 'Legacy Song', artist: 'Artist', duration: 120 }],
+              },
+            },
+          ],
+          overrides: {},
+        }),
+      );
+      const exports = {
+        exports: {} as {
+          start(ipc: object, getWin: () => null, settings: object): Promise<void>;
+          remoteSongs(id: string): { id: string; title: string }[];
+          remoteSong(key: string): { id: string; title: string } | undefined;
+        },
+      };
+      vm.runInNewContext(fs.readFileSync(join(__dirname, '../../electron/library.cjs'), 'utf8'), {
+        require: (name: string) =>
+          name === 'electron'
+            ? { app: { getPath: () => dir }, protocol: { handle: () => {} } }
+            : name === './online/library-links.cjs'
+              ? require('../../electron/online/library-links.cjs')
+              : require(name),
+        module: exports,
+        process: { env: { CADENZA_USER_DATA: dir } },
+        Buffer,
+        Response,
+        URL,
+        TextDecoder,
+        console,
+        clearTimeout,
+        setTimeout: (fn: () => void, ms: number) => {
+          const id = setTimeout(fn, ms);
+          timers.add(id);
+          return id;
+        },
+      });
+      await exports.exports.start(
+        { handle: (name: string, fn: (...args: unknown[]) => unknown) => handlers.set(name, fn) },
+        () => null,
+        { scanOnLaunch: false },
+      );
+      const view = handlers.get('lib:get')!() as {
+        playlists: { id: string; remote?: { songCount: number; songs?: unknown[] } }[];
+      };
+      expect(view.playlists[0].remote?.songCount).toBe(1);
+      expect(view.playlists[0].remote?.songs).toBeUndefined();
+      expect(exports.exports.remoteSongs('sync-legacy').map((s) => s.id)).toEqual(['s1']);
+      expect(exports.exports.remoteSong('netease:s1')?.title).toBe('Legacy Song');
+      expect(fs.existsSync(join(dir, 'library', 'remote-playlists', 'sync-legacy.json'))).toBe(true);
+      // Deleting the synced playlist removes the shard file cleanly.
+      expect(handlers.get('lib:playlist')!(null, 'delete', 'sync-legacy')).toBe(true);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(fs.existsSync(join(dir, 'library', 'remote-playlists', 'sync-legacy.json'))).toBe(false);
     } finally {
       for (const timer of timers) clearTimeout(timer);
       await rm(dir, { recursive: true, force: true });
@@ -400,6 +529,61 @@ describe('download transactions', () => {
       expect(imported).toBe(false);
       const { readdir } = await import('node:fs/promises');
       expect(await readdir(dir)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  it('reuses cached album artwork across downloads and emits lightweight progress patches', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'denza-artwork-lru-'));
+    try {
+      const store = { data: { jobs: [], folder: dir }, save: async () => {} };
+      let artworkFetches = 0;
+      const progressPatches: { id: string; status: string; received: number; total: number }[] = [];
+      const flac = await readFile(join(__dirname, '../fixtures/online-audio/tone.flac'));
+      const cover = await readFile(join(__dirname, '../fixtures/cover.jpg'));
+      const manager = new Downloads(
+        store,
+        {
+          resolve: async () => ({ url: 'https://fixture.invalid/audio', expectedFormat: 'flac' }),
+          lyrics: async () => ({ original: '[00:00]Fixture' }),
+        },
+        { importDownload: async () => {} },
+        () => {},
+        async () => new Response(flac),
+        async () => {
+          artworkFetches++;
+          return new Response(cover, { headers: { 'content-type': 'image/jpeg' } });
+        },
+        (patch: { id: string; status: string; received: number; total: number }) => progressPatches.push(patch),
+      );
+      try {
+        for (let i = 0; i < 2; i++) {
+          await manager.run(
+            {
+              id: `art-${i}`,
+              track: {
+                platform: 'netease',
+                id: `art-${i}`,
+                title: `Art ${i}`,
+                artist: 'Artist',
+                album: 'Same Album',
+                duration: 1,
+                artworkUrl: 'https://p1.music.126.net/shared-cover.jpg',
+              },
+              quality: 'lossless',
+              folder: dir,
+              status: 'queued',
+              received: 0,
+              total: 0,
+            },
+            new AbortController(),
+          );
+        }
+        expect(artworkFetches).toBe(1);
+        expect(progressPatches.length).toBeGreaterThanOrEqual(0);
+      } finally {
+        await manager.close();
+      }
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

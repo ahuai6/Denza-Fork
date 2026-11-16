@@ -2,7 +2,7 @@
 // the play mode, as the classic player card has them. The buttons live in the HUD's player card (a portal into it); the
 // lists open as glass cards above it.
 import { createPortal } from 'react-dom';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { tx } from '../../i18n';
 import { useStore, trackOf, lib, toast, ui } from '../state';
 import { Lib, D } from '../bridge';
@@ -22,9 +22,12 @@ import {
 } from '../playback/player';
 import { ts } from './i18n';
 import s from './SpacePanels.module.css';
-import { OnlineLyricsSearch } from '../ui/OnlineLyricsSearch';
-import { OnlineDialog } from '../ui/OnlineMusic';
-import { TranslationEditor } from '../ui/TranslationEditor';
+import { OnlineDialog } from '../ui/OnlineDialog';
+
+const OnlineLyricsSearch = lazy(() =>
+  import('../ui/OnlineLyricsSearch').then((m) => ({ default: m.OnlineLyricsSearch })),
+);
+const TranslationEditor = lazy(() => import('../ui/TranslationEditor').then((m) => ({ default: m.TranslationEditor })));
 
 export type Panel = 'lyrics' | 'queue' | null;
 
@@ -165,33 +168,37 @@ function Lyrics({
       </button>
       {searching && (
         <OnlineDialog title={tx('s.lyr.online')} close={() => setSearching(false)}>
-          <OnlineLyricsSearch
-            key={shownId}
+          <Suspense fallback={null}>
+            <OnlineLyricsSearch
+              key={shownId}
+              song={{
+                title: trackOf(shownId)?.title || '',
+                artist: trackOf(shownId)?.artist || '',
+                album: trackOf(shownId)?.album || '',
+                duration: trackOf(shownId)?.duration,
+              }}
+              apply={async (value) => {
+                await useLyrics(value);
+                setEdit(null);
+                setSearching(false);
+              }}
+            />
+          </Suspense>
+        </OnlineDialog>
+      )}
+      {translating && (
+        <Suspense fallback={null}>
+          <TranslationEditor
+            source={edit ?? text}
             song={{
               title: trackOf(shownId)?.title || '',
               artist: trackOf(shownId)?.artist || '',
               album: trackOf(shownId)?.album || '',
-              duration: trackOf(shownId)?.duration,
             }}
-            apply={async (value) => {
-              await useLyrics(value);
-              setEdit(null);
-              setSearching(false);
-            }}
+            apply={setEdit}
+            close={() => setTranslating(false)}
           />
-        </OnlineDialog>
-      )}
-      {translating && (
-        <TranslationEditor
-          source={edit ?? text}
-          song={{
-            title: trackOf(shownId)?.title || '',
-            artist: trackOf(shownId)?.artist || '',
-            album: trackOf(shownId)?.album || '',
-          }}
-          apply={setEdit}
-          close={() => setTranslating(false)}
-        />
+        </Suspense>
       )}
       {edit != null ? (
         <div className={s.editor}>

@@ -49,6 +49,7 @@ const P = {
   thumbs: () => path.join(root(), 'thumbs'),
   analysis: () => path.join(root(), 'rhythm'),
   songs: () => path.join(root(), 'songs'),
+  remotePlaylists: () => path.join(root(), 'remote-playlists'),
 };
 
 let db = null,
@@ -89,9 +90,11 @@ async function adopt() {
   }
 }
 async function load() {
-  for (const d of [root(), P.covers(), P.thumbs(), P.analysis(), P.songs()]) await fsp.mkdir(d, { recursive: true });
+  for (const d of [root(), P.covers(), P.thumbs(), P.analysis(), P.songs(), P.remotePlaylists()])
+    await fsp.mkdir(d, { recursive: true });
   try {
     db = { ...empty(), ...JSON.parse(await fsp.readFile(P.db(), 'utf8')) };
+    if (await onlineLibrary.migrateLegacyPlaylists()) save();
   } catch (e) {
     db = empty();
     if (!process.env.CADENZA_USER_DATA && (await adopt())) save();
@@ -175,7 +178,15 @@ function view() {
     folders: db.folders.slice(),
     tracks: Object.values(db.tracks).map(trackView),
     favorites: db.favorites.slice(),
-    playlists: db.playlists.map((p) => ({ ...p, tracks: p.tracks.slice() })),
+    playlists: db.playlists.map((p) => {
+      if (!p.remote) return { ...p, tracks: p.tracks.slice() };
+      const { songs, ...remoteSummary } = p.remote;
+      return {
+        ...p,
+        tracks: p.tracks.slice(),
+        remote: { ...remoteSummary, songCount: remoteSummary.songCount ?? songs?.length ?? p.tracks.length },
+      };
+    }),
   };
 }
 
@@ -289,14 +300,20 @@ async function audioKey(p, size) {
     await fh.close();
   }
 }
-const ttmlSidecar = (p) => {
+const ttmlSidecar = (p, sidecars) => {
   const b = p.slice(0, -path.extname(p).length);
-  for (const e of ['.ttml', '.TTML']) if (fs.existsSync(b + e)) return b + e;
+  for (const e of ['.ttml', '.TTML']) {
+    const candidate = b + e;
+    if (sidecars ? sidecars.has(candidate) : fs.existsSync(candidate)) return candidate;
+  }
   return null;
 };
-const sidecar = (p) => {
+const sidecar = (p, sidecars) => {
   const b = p.slice(0, -path.extname(p).length);
-  for (const e of ['.lrc', '.LRC', '.Lrc']) if (fs.existsSync(b + e)) return b + e;
+  for (const e of ['.lrc', '.LRC', '.Lrc']) {
+    const candidate = b + e;
+    if (sidecars ? sidecars.has(candidate) : fs.existsSync(candidate)) return candidate;
+  }
   return null;
 };
 
@@ -326,7 +343,7 @@ async function storeCover(data) {
 }
 
 /* ---------- scanning ---------- */
-async function walk(dir, out, depth = 0) {
+async function walk(dir, out, sidecars, depth = 0) {
   if (depth > 24) return;
   let ents = [];
   try {
@@ -337,10 +354,11 @@ async function walk(dir, out, depth = 0) {
   for (const e of ents) {
     if (e.name.startsWith('.')) continue;
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) await walk(p, out, depth + 1);
+    if (e.isDirectory()) await walk(p, out, sidecars, depth + 1);
     else {
       const x = path.extname(e.name).toLowerCase();
       if (PLAYABLE.has(x) || PROTECTED.has(x)) out.push(p);
+      else if (sidecars && (x === '.lrc' || x === '.ttml')) sidecars.add(p);
     }
   }
 }
@@ -389,6 +407,71 @@ async function readTags(p) {
     tv: TAGS_V,
   };
 }
+async function upsertTrack(p, old, findMoved, sidecars) {
+  const st = await fsp.stat(p);
+  if (old && old.size === st.size && old.mtime === st.mtimeMs) {
+    old.lrc = !!sidecar(p, sidecars);
+    old.ttmlFile = !!ttmlSidecar(p, sidecars);
+    if (!old.ak && !old.protected) old.ak = await audioKey(p, st.size).catch(() => undefined); // (a song from before audio keys: its key, once)
+    if (!old.protected && old.tv !== TAGS_V) {
+      const tg = await readTags(p).catch(() => null);
+      if (tg) {
+        delete tg.cover;
+        Object.assign(old, tg);
+      }
+    }
+    return old;
+  }
+  // which song this is: the one at this path, or (moved, renamed) one gone from its path, whose sound is the same —
+  // then it keeps its id; tags written into the file change the file, never the sound
+  const ak = await audioKey(p, st.size).catch(() => null),
+    same = (t) => t && ak && t.ak === ak;
+  const moved = ak && !same(old) ? findMoved(ak, p) : null;
+  const id = same(old) ? old.id : moved ? moved.id : await fileId(p, st.size),
+    x = path.extname(p).toLowerCase(),
+    prev = db.tracks[id];
+  const base = {
+    id,
+    ak,
+    path: p,
+    size: st.size,
+    mtime: st.mtimeMs,
+    added: prev?.added || Date.now(),
+    plays: prev?.plays || 0,
+    last: prev?.last || 0,
+    lrc: !!sidecar(p, sidecars),
+    ttmlFile: !!ttmlSidecar(p, sidecars),
+    failed: false,
+  };
+  if (PROTECTED.has(x)) db.tracks[id] = { ...base, title: path.parse(p).name, protected: true };
+  else {
+    const tg = await readTags(p).catch(() => ({}));
+    const coverKey = await storeCover(tg.cover).catch(() => null);
+    delete tg.cover;
+    // (the analysis goes with the sound: kept while the audio key is the same, whatever happened to the tags)
+    db.tracks[id] = {
+      ...prev,
+      ...base,
+      ...tg,
+      coverKey,
+      protected: false,
+      analyzed: prev?.analyzed && (prev.ak ? prev.ak === ak : prev.size === st.size) ? prev.analyzed : 0,
+      ...(prev && prev.ak && prev.ak !== ak ? { loudness: undefined } : {}),
+    };
+  }
+  if (old && old.id !== id) delete db.tracks[old.id];
+  return db.tracks[id];
+}
+async function importFile(p) {
+  const x = path.extname(p).toLowerCase();
+  if (!PLAYABLE.has(x) && !PROTECTED.has(x)) return null;
+  const old = Object.values(db.tracks).find((t) => t.path === p);
+  const track = await upsertTrack(p, old, (ak, target) =>
+    Object.values(db.tracks).find((t) => t.ak === ak && t.path !== target && !fs.existsSync(t.path)),
+  );
+  if (track && !track.protected) send('lib:wake');
+  return track;
+}
 let scanning = false,
   rescan = false;
 async function scan() {
@@ -400,72 +483,35 @@ async function scan() {
   try {
     do {
       rescan = false;
-      const files = [];
-      for (const d of db.folders) await walk(d, files);
+      const files = [],
+        sidecars = new Set();
+      for (const d of db.folders) await walk(d, files, sidecars);
       const seen = new Set(files),
-        byPath = new Map(Object.values(db.tracks).map((t) => [t.path, t]));
+        byPath = new Map(),
+        byAk = new Map();
+      for (const t of Object.values(db.tracks)) {
+        byPath.set(t.path, t);
+        if (t.ak) {
+          let group = byAk.get(t.ak);
+          if (!group) {
+            group = [];
+            byAk.set(t.ak, group);
+          }
+          group.push(t);
+        }
+      }
       let done = 0;
       send('lib:progress', { phase: 'scan', done, total: files.length });
       const queue = files.slice(),
         work = async () => {
           for (let p; (p = queue.shift()); ) {
             try {
-              const st = await fsp.stat(p),
-                old = byPath.get(p);
-              if (old && old.size === st.size && old.mtime === st.mtimeMs) {
-                old.lrc = !!sidecar(p);
-                old.ttmlFile = !!ttmlSidecar(p);
-                if (!old.ak && !old.protected) old.ak = await audioKey(p, st.size).catch(() => undefined); // (a song from before audio keys: its key, once)
-                if (!old.protected && old.tv !== TAGS_V) {
-                  const tg = await readTags(p).catch(() => null);
-                  if (tg) {
-                    delete tg.cover;
-                    Object.assign(old, tg);
-                  }
-                }
-              } else {
-                // which song this is: the one at this path, or (moved, renamed) one gone from its path, whose sound is the same —
-                // then it keeps its id; tags written into the file change the file, never the sound
-                const ak = await audioKey(p, st.size).catch(() => null),
-                  same = (t) => t && ak && t.ak === ak;
-                const moved =
-                  ak && !same(old)
-                    ? Object.values(db.tracks).find((t) => t.ak === ak && t.path !== p && !seen.has(t.path))
-                    : null;
-                const id = same(old) ? old.id : moved ? moved.id : await fileId(p, st.size),
-                  x = path.extname(p).toLowerCase(),
-                  prev = db.tracks[id];
-                const base = {
-                  id,
-                  ak,
-                  path: p,
-                  size: st.size,
-                  mtime: st.mtimeMs,
-                  added: prev?.added || Date.now(),
-                  plays: prev?.plays || 0,
-                  last: prev?.last || 0,
-                  lrc: !!sidecar(p),
-                  ttmlFile: !!ttmlSidecar(p),
-                  failed: false,
-                };
-                if (PROTECTED.has(x)) db.tracks[id] = { ...base, title: path.parse(p).name, protected: true };
-                else {
-                  const tg = await readTags(p).catch(() => ({}));
-                  const coverKey = await storeCover(tg.cover).catch(() => null);
-                  delete tg.cover;
-                  // (the analysis goes with the sound: kept while the audio key is the same, whatever happened to the tags)
-                  db.tracks[id] = {
-                    ...prev,
-                    ...base,
-                    ...tg,
-                    coverKey,
-                    protected: false,
-                    analyzed: prev?.analyzed && (prev.ak ? prev.ak === ak : prev.size === st.size) ? prev.analyzed : 0,
-                    ...(prev && prev.ak && prev.ak !== ak ? { loudness: undefined } : {}),
-                  };
-                }
-                if (old && old.id !== id) delete db.tracks[old.id];
-              }
+              await upsertTrack(
+                p,
+                byPath.get(p),
+                (ak, target) => (byAk.get(ak) || []).find((t) => t.path !== target && !seen.has(t.path)),
+                sidecars,
+              );
             } catch (e) {
               /* unreadable file: skipped this time */
             }
@@ -607,15 +653,19 @@ function nextJob(version) {
     const u = loudPick(id);
     if (u) return { id: u.id, only: 'loudness' };
   }
-  const byRecent = (a, b) => b.last - a.last || b.added - a.added;
-  const t = Object.values(db.tracks)
-    .filter((x) => pick(x.id))
-    .sort(byRecent)[0];
-  if (t) return { id: t.id };
-  const u = Object.values(db.tracks)
-    .filter((x) => loudPick(x.id))
-    .sort(byRecent)[0];
-  return u ? { id: u.id, only: 'loudness' } : null;
+  let bestAnalyze = null,
+    bestLoud = null;
+  const newer = (a, b) => !b || a.last > b.last || (a.last === b.last && a.added > b.added);
+  for (const x of Object.values(db.tracks)) {
+    if (x.protected) continue;
+    if (x.analyzed !== want && !x.failed) {
+      if (newer(x, bestAnalyze)) bestAnalyze = x;
+    } else if (!bestAnalyze && x.analyzed === want && !x.loudness && !x.loudFailed) {
+      if (newer(x, bestLoud)) bestLoud = x;
+    }
+  }
+  if (bestAnalyze) return { id: bestAnalyze.id };
+  return bestLoud ? { id: bestLoud.id, only: 'loudness' } : null;
 }
 
 /* ---------- per-song data: the lyric style bound to this song, lock, MV, timing ---------- */
@@ -1242,8 +1292,10 @@ function register(ipcMain, getWin) {
     if (!p) return false;
     if (p.remote && op !== 'delete') return false;
     if (op === 'rename') p.name = String(b || '').slice(0, 80) || p.name;
-    else if (op === 'delete') db.playlists = db.playlists.filter((x) => x !== p);
-    else if (op === 'add') {
+    else if (op === 'delete') {
+      db.playlists = db.playlists.filter((x) => x !== p);
+      if (p.remote) onlineLibrary.removePlaylistShard(p.id);
+    } else if (op === 'add') {
       for (const id of [].concat(b)) if (db.tracks[id] && !p.tracks.includes(id)) p.tracks.push(id);
     } else if (op === 'remove') p.tracks = p.tracks.filter((id) => ![].concat(b).includes(id));
     else if (op === 'order') p.tracks = [].concat(b).filter((id) => p.tracks.includes(id));
@@ -1373,9 +1425,11 @@ const onlineLibrary = require('./online/library-links.cjs').createLibraryIntegra
   hasArtwork: (key) => /^[a-f0-9]{20}$/.test(key) && fs.existsSync(path.join(P.covers(), key + '.img')),
   trackView,
   scan,
+  importFile,
   watchAll,
   changed,
   view,
+  remoteDir: P.remotePlaylists(),
 });
 module.exports = {
   start,
@@ -1383,6 +1437,8 @@ module.exports = {
   cachePlaylistCover: onlineLibrary.cachePlaylistCover,
   importDownload: onlineLibrary.importDownload,
   syncPlaylists: onlineLibrary.syncPlaylists,
+  remoteSongs: onlineLibrary.remoteSongs,
+  flushRemotePlaylists: onlineLibrary.flushRemotePlaylists,
   remoteSong: onlineLibrary.remoteSong,
   remotePlaylist: onlineLibrary.remotePlaylist,
   scheme: {

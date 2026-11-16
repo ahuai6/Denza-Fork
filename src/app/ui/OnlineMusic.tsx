@@ -1,17 +1,16 @@
-import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { tx } from '../../i18n';
 import { Online, type LibView } from '../bridge';
-import { lib, ui, settings, useStore, fmtTime } from '../state';
+import { lib, settings, useStore, fmtTime } from '../state';
 import { playIds } from '../playback/player';
 import { online, request, jobId } from '../online/state';
 import { run } from '../commands';
-import { dialogs } from '../actions/dialogs';
 import { openRemote } from '../actions/online';
 import {
   MUSIC_PLATFORMS,
   platformInfo,
   songKey,
+  type DownloadJob,
   type OnlineSong,
   type SearchResult,
   type MusicPlatform,
@@ -25,94 +24,12 @@ import s from './OnlineMusic.module.css';
 import cards from './CollectionCards.module.css';
 import { useOnlineSurface } from './OnlineSurface';
 import { PlatformArtwork } from './PlatformArtwork';
+import { OnlineDialog } from './OnlineDialog';
+import { useVirtualWindow } from './useVirtualWindow';
 
+export { OnlineDialog };
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 const platformName = (platform: string) => MUSIC_PLATFORMS.find(([id]) => id === platform)?.[1] || platform;
-export function OnlineDialog({ title, children, close }: { title: string; children: ReactNode; close(): void }) {
-  const surface = useOnlineSurface();
-  const picture = useStore(ui, (state) => state.layer !== 'none');
-  const ref = useRef<HTMLElement>(null),
-    id = useId(),
-    onClose = useRef(close);
-  onClose.current = close;
-  const active = useStore(ui, (state) => state.dialog === id);
-  useLayoutEffect(() => {
-    const prior = document.activeElement;
-    const lease = dialogs.claim(id, () => onClose.current());
-    return () => {
-      lease.release();
-      if (lease.restoreFocus() && prior instanceof HTMLElement)
-        requestAnimationFrame(() => {
-          if (!ui.get().dialog && prior.isConnected && prior.getClientRects().length && !prior.closest('[inert]'))
-            prior.focus();
-        });
-    };
-  }, [id]);
-  useLayoutEffect(() => {
-    if (active) ref.current?.focus();
-  }, [active]);
-  useEffect(() => {
-    if (!active) return;
-    const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (ref.current?.querySelector('[role="listbox"]:not([data-closing])')) return;
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        dialogs.dismiss();
-      }
-      if (e.key === 'Tab') {
-        const items = [
-          ...(ref.current?.querySelectorAll<HTMLElement>(
-            'button:not(:disabled),input:not(:disabled),textarea:not(:disabled),[tabindex="0"]',
-          ) || []),
-        ].filter((el) => el.getClientRects().length);
-        const first = items[0],
-          last = items.at(-1);
-        if (
-          !items.includes(document.activeElement as HTMLElement) ||
-          (!e.shiftKey && document.activeElement === last)
-        ) {
-          e.preventDefault();
-          first?.focus();
-        } else if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last?.focus();
-        }
-      }
-    };
-    addEventListener('keydown', key, true);
-    return () => removeEventListener('keydown', key, true);
-  }, [active]);
-  if (!active) return null;
-  return createPortal(
-    <div
-      className={s.overlay + ' ' + surface.className + (!surface.space && picture ? ' on-picture' : '')}
-      data-online-scene={surface.space ? 'space' : 'classic'}
-      onKeyDown={(e) => {
-        if (e.key !== 'F11') e.stopPropagation();
-      }}
-      onPointerDown={(e) => {
-        if (e.target === e.currentTarget) dialogs.dismiss();
-      }}
-    >
-      <section
-        className={s.dialog + (surface.space ? ' card' : '')}
-        ref={ref}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-      >
-        <header className={s.header}>
-          <h2>{title}</h2>
-          <Button onClick={() => dialogs.dismiss()}>{tx('on.close')}</Button>
-        </header>
-        {children}
-      </section>
-    </div>,
-    document.body,
-  );
-}
 export function QualityPicker({
   value,
   change,
@@ -201,6 +118,7 @@ export function SearchSongs({
       });
   }, [preview, reduced]);
   const folder = useStore(online, (v) => v.folder);
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
   const lyricOnly = !!onReferences || !!onLyrics;
   useEffect(
     () => () => {
@@ -353,7 +271,7 @@ export function SearchSongs({
                 type="checkbox"
                 disabled={!platformInfo(song.platform).download}
                 aria-label={song.title}
-                checked={selected.includes(songKey(song))}
+                checked={selectedSet.has(songKey(song))}
                 onChange={(e) =>
                   setSelected((v) => (e.target.checked ? [...v, songKey(song)] : v.filter((k) => k !== songKey(song))))
                 }
@@ -441,6 +359,54 @@ export function SearchSongs({
     </div>
   );
 }
+const SyncedSongRow = memo(function SyncedSongRow({
+  index,
+  song,
+  localIndex,
+  tracks,
+  onOpen,
+  onDownload,
+}: {
+  index: number;
+  song: OnlineSong;
+  localIndex: number;
+  tracks: string[];
+  onOpen: (args: { key?: string; playlistId?: string }) => void;
+  onDownload: (songs: OnlineSong[]) => void;
+}) {
+  const info = platformInfo(song.platform);
+  return (
+    <div className={s.row}>
+      <span>{index + 1}</span>
+      <Cover src={song.artworkUrl} className={s.songCover} />
+      <div className={s.info}>
+        <b>{song.title}</b>
+        <small>
+          {song.artist} · {song.album} · {fmtTime(song.duration)} ·{' '}
+          {tx(song.localId ? 'on.localSong' : info.remotePlayback ? 'on.remoteSong' : 'on.notDownloaded')}
+        </small>
+      </div>
+      {song.localId ? (
+        <Button size="sm" onClick={() => void playIds(tracks, localIndex)}>
+          {tx('s.play')}
+        </Button>
+      ) : (
+        <>
+          {info.remotePlayback && (
+            <Button size="sm" onClick={() => onOpen({ key: songKey(song) })}>
+              {tx('on.playBrowser')}
+            </Button>
+          )}
+          {info.download && (
+            <Button size="sm" onClick={() => onDownload([song])}>
+              {tx('on.download')}
+            </Button>
+          )}
+        </>
+      )}
+    </div>
+  );
+});
 export function SyncedPlaylists({ playlistId, embedded = false }: { playlistId?: string; embedded?: boolean } = {}) {
   const surface = useOnlineSurface();
   const playlists = useStore(lib, (v) => v.playlists).filter((p) => p.remote),
@@ -450,9 +416,44 @@ export function SyncedPlaylists({ playlistId, embedded = false }: { playlistId?:
   const selected = playlists.find((p) => p.id === (playlistId || picked));
   const [quality, setQuality] = useQuality(selected?.remote?.platform || platform || 'all');
   const remote = selected?.remote;
+  const [loadedSongs, setLoadedSongs] = useState<{ key: string; songs: OnlineSong[] } | null>(null);
+  const inlineSongs = remote?.songs;
+  const songKeyTag = selected && remote ? `${selected.id}:${remote.updated}` : '';
+  const songs = useMemo(
+    () => inlineSongs ?? (loadedSongs?.key === songKeyTag ? loadedSongs.songs : []),
+    [inlineSongs, loadedSongs, songKeyTag],
+  );
+  useEffect(() => {
+    if (!selected || !remote || inlineSongs) return;
+    let active = true;
+    const key = `${selected.id}:${remote.updated}`;
+    request<OnlineSong[]>('playlistSongs', { id: selected.id })
+      .then((rows) => {
+        if (active) setLoadedSongs({ key, songs: Array.isArray(rows) ? rows : [] });
+      })
+      .catch((e) => {
+        if (active) setError(message(e));
+      });
+    return () => {
+      active = false;
+    };
+  }, [selected?.id, remote?.updated, selected?.tracks, inlineSongs]);
   const accounts = useStore(online, (v) => v.accounts),
     [busy, setBusy] = useState(false),
     task = useRef('');
+  const accountsByPlatform = useMemo(() => new Map(accounts.map((a) => [a.platform, a])), [accounts]);
+  const localPosByIdx = useMemo(() => {
+    let n = 0;
+    return songs.map((v) => (v.localId ? n++ : -1));
+  }, [songs]);
+  const hasRemoteMissing = useMemo(() => songs.some((song) => !song.localId), [songs]);
+  const playlistWin = useVirtualWindow({
+    count: songs.length,
+    rowHeight: 72,
+    gap: 8,
+    threshold: 80,
+    resetKey: selected?.id,
+  });
   useEffect(
     () => () => {
       if (task.current) void request('cancel', { jobId: task.current });
@@ -473,23 +474,26 @@ export function SyncedPlaylists({ playlistId, embedded = false }: { playlistId?:
       task.current = '';
     }
   };
-  const download = async (songs: OnlineSong[]) => {
-    setError('');
-    try {
-      if (!online.get().folder && !(await request<string>('folder'))) return;
-      await request('enqueue', { keys: songs.map(songKey), quality });
-    } catch (e) {
-      setError(message(e));
-    }
-  };
-  const open = async (args: { key?: string; playlistId?: string }) => {
+  const download = useCallback(
+    async (list: OnlineSong[]) => {
+      setError('');
+      try {
+        if (!online.get().folder && !(await request<string>('folder'))) return;
+        await request('enqueue', { keys: list.map(songKey), quality });
+      } catch (e) {
+        setError(message(e));
+      }
+    },
+    [quality],
+  );
+  const open = useCallback(async (args: { key?: string; playlistId?: string }) => {
     setError('');
     try {
       await openRemote(args);
     } catch (e) {
       setError(message(e));
     }
-  };
+  }, []);
   return (
     <div className={s.stack + ' ' + surface.className} data-test="synced-playlists">
       <Note>{tx(remote ? platformInfo(remote.platform).syncHelp : 'on.syncHelp')}</Note>
@@ -528,7 +532,7 @@ export function SyncedPlaylists({ playlistId, embedded = false }: { playlistId?:
               >
                 <PlatformArtwork platform={id} />
                 <b>{label}</b>
-                <small>{accounts.find((a) => a.platform === id)?.name || tx('on.signin')}</small>
+                <small>{accountsByPlatform.get(id)?.name || tx('on.signin')}</small>
               </button>
             </div>
           ))}
@@ -540,8 +544,7 @@ export function SyncedPlaylists({ playlistId, embedded = false }: { playlistId?:
             .filter(
               (p) =>
                 p.remote?.platform === platform &&
-                (!accounts.find((a) => a.platform === platform) ||
-                  p.remote.uid === accounts.find((a) => a.platform === platform)?.uid),
+                (!accountsByPlatform.get(platform) || p.remote.uid === accountsByPlatform.get(platform)?.uid),
             )
             .map((p) => (
               <div className={cards.cardWrap} key={p.id}>
@@ -549,7 +552,7 @@ export function SyncedPlaylists({ playlistId, embedded = false }: { playlistId?:
                   <Cover k={p.remote?.cover} src={p.remote?.cover ? undefined : p.remote?.artworkUrl} />
                   <b>{p.name}</b>
                   <small>
-                    {p.remote?.songs.length} · {platformName(platform)}
+                    {p.remote?.songCount ?? p.remote?.songs?.length ?? 0} · {platformName(platform)}
                   </small>
                 </button>
               </div>
@@ -594,8 +597,8 @@ export function SyncedPlaylists({ playlistId, embedded = false }: { playlistId?:
             )}
             {platformInfo(remote.platform).download && (
               <Button
-                disabled={!remote.songs.some((song) => !song.localId)}
-                onClick={() => void download(remote.songs.filter((song) => !song.localId).slice(0, 100))}
+                disabled={!hasRemoteMissing}
+                onClick={() => void download(songs.filter((song) => !song.localId).slice(0, 100))}
               >
                 {tx('on.download')} (≤100)
               </Button>
@@ -603,54 +606,25 @@ export function SyncedPlaylists({ playlistId, embedded = false }: { playlistId?:
           </div>
           {platformInfo(remote.platform).playbackHelp && <Note>{tx(platformInfo(remote.platform).playbackHelp!)}</Note>}
           <small>
-            {new Date(remote.updated).toLocaleString()} · {selected.tracks.length}/{remote.songs.length}
+            {new Date(remote.updated).toLocaleString()} · {selected.tracks.length}/{remote.songCount ?? songs.length}
           </small>
-          <div className={s.rows}>
-            {remote.songs.map((song, i) => (
-              <div className={s.row} key={`${song.id}:${i}`}>
-                <span>{i + 1}</span>
-                <Cover src={song.artworkUrl} className={s.songCover} />
-                <div className={s.info}>
-                  <b>{song.title}</b>
-                  <small>
-                    {song.artist} · {song.album} · {fmtTime(song.duration)} ·{' '}
-                    {tx(
-                      song.localId
-                        ? 'on.localSong'
-                        : platformInfo(song.platform).remotePlayback
-                          ? 'on.remoteSong'
-                          : 'on.notDownloaded',
-                    )}
-                  </small>
-                </div>
-                {song.localId ? (
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      void playIds(
-                        selected.tracks,
-                        remote.songs.slice(0, i + 1).filter((value) => value.localId).length - 1,
-                      )
-                    }
-                  >
-                    {tx('s.play')}
-                  </Button>
-                ) : (
-                  <>
-                    {platformInfo(song.platform).remotePlayback && (
-                      <Button size="sm" onClick={() => void open({ key: songKey(song) })}>
-                        {tx('on.playBrowser')}
-                      </Button>
-                    )}
-                    {platformInfo(song.platform).download && (
-                      <Button size="sm" onClick={() => void download([song])}>
-                        {tx('on.download')}
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
+          <div className={s.rows} ref={playlistWin.ref}>
+            {playlistWin.topPad > 0 && <div style={{ height: playlistWin.topPad }} aria-hidden="true" />}
+            {songs.slice(playlistWin.start, playlistWin.end).map((song, offset) => {
+              const i = playlistWin.start + offset;
+              return (
+                <SyncedSongRow
+                  key={`${song.id}:${i}`}
+                  index={i}
+                  song={song}
+                  localIndex={localPosByIdx[i]}
+                  tracks={selected.tracks}
+                  onOpen={open}
+                  onDownload={download}
+                />
+              );
+            })}
+            {playlistWin.bottomPad > 0 && <div style={{ height: playlistWin.bottomPad }} aria-hidden="true" />}
           </div>
         </>
       )}
@@ -798,17 +772,94 @@ function Accounts() {
     </div>
   );
 }
+const DownloadJobRow = memo(function DownloadJobRow({
+  j,
+  onAction,
+}: {
+  j: DownloadJob;
+  onAction: (id: string, action: string) => void;
+}) {
+  const qualityLabels = platformInfo(j.track.platform).qualityLabels;
+  return (
+    <div className={s.row}>
+      <Cover src={j.track.artworkUrl} className={s.songCover} />
+      <div className={s.info}>
+        <b>{j.track.title}</b>
+        <small>
+          {tx('on.status.' + j.status)} · {j.total ? Math.round((j.received / j.total) * 100) + '%' : ''}
+        </small>
+        <progress
+          aria-label={j.track.title}
+          max={j.total || undefined}
+          value={j.total ? Math.min(j.received, j.total) : j.status === 'completed' ? 1 : undefined}
+        />
+        <small>
+          {(j.received / 1048576).toFixed(1)} / {j.total ? (j.total / 1048576).toFixed(1) : '…'} MB ·{' '}
+          {tx(qualityLabels?.[j.quality as 'high'] || 'on.' + j.quality)}
+          {j.resolvedQuality && j.resolvedQuality !== j.quality
+            ? ' → ' + tx(qualityLabels?.[j.resolvedQuality as 'high'] || 'on.' + j.resolvedQuality)
+            : ''}{' '}
+          · {j.source}
+        </small>
+        {j.fallbackReason && <small>{tx('on.qualityFallback')}</small>}
+        {j.lyrics && (
+          <small>
+            {tx('on.lyricFields')}:{' '}
+            {j.lyrics.fields.join(' + ').toUpperCase() ||
+              tx('on.fields.' + (j.lyrics.status === 'disabled' ? 'none' : 'unavailable'))}
+            {j.lyrics.converted && j.lyrics.fields.includes('ttml') ? ' · ' + tx('on.convertedTtml') : ''}
+          </small>
+        )}
+        {j.metadataWarning && <small role="status">{j.metadataWarning}</small>}
+        {j.info && (
+          <small>
+            {j.info.codec} · {j.info.bits} bit · {j.info.sampleRate / 1000} kHz · {Math.round(j.info.bitrate / 1000)}{' '}
+            kbps
+          </small>
+        )}
+        {j.error && <small role="status">{j.error}</small>}
+      </div>
+      {['queued', 'resolving', 'downloading'].includes(j.status) && (
+        <Button size="sm" onClick={() => onAction(j.id, 'pause')}>
+          {tx('on.pause')}
+        </Button>
+      )}
+      {['paused', 'failed', 'cancelled'].includes(j.status) && (
+        <Button size="sm" onClick={() => onAction(j.id, 'retry')}>
+          {tx('on.retry')}
+        </Button>
+      )}
+      {j.status !== 'saving' && j.status !== 'completed' && j.status !== 'cancelled' && (
+        <Button size="sm" onClick={() => onAction(j.id, 'cancel')}>
+          {tx('on.cancel')}
+        </Button>
+      )}
+      {['completed', 'failed', 'cancelled', 'paused'].includes(j.status) && (
+        <Button size="sm" onClick={() => onAction(j.id, 'remove')}>
+          {tx('on.remove')}
+        </Button>
+      )}
+    </div>
+  );
+});
 export function DownloadList() {
   const state = useStore(online),
     [error, setError] = useState('');
-  const act = async (operation: string, args?: object) => {
+  const act = useCallback(async (operation: string, args?: object) => {
     setError('');
     try {
       await request(operation, args);
     } catch (e) {
       setError(message(e));
     }
-  };
+  }, []);
+  const onJobAction = useCallback((id: string, action: string) => void act('downloadAction', { id, action }), [act]);
+  const downloadWin = useVirtualWindow({
+    count: state.jobs.length,
+    rowHeight: 96,
+    gap: 8,
+    threshold: 80,
+  });
   return (
     <div className={s.stack} data-test="online-downloads">
       <Button onClick={() => void act('folder')}>{tx('on.folder')}</Button>
@@ -817,71 +868,13 @@ export function DownloadList() {
       <Note>{tx('on.nativeTtmlOnly')}</Note>
       {!state.jobs.length && <Note>{tx('on.empty')}</Note>}
       {error && <Note>{error}</Note>}
-      {state.jobs.map((j) => (
-        <div className={s.row} key={j.id}>
-          <Cover src={j.track.artworkUrl} className={s.songCover} />
-          <div className={s.info}>
-            <b>{j.track.title}</b>
-            <small>
-              {tx('on.status.' + j.status)} · {j.total ? Math.round((j.received / j.total) * 100) + '%' : ''}
-            </small>
-            <progress
-              aria-label={j.track.title}
-              max={j.total || undefined}
-              value={j.total ? Math.min(j.received, j.total) : j.status === 'completed' ? 1 : undefined}
-            />
-            <small>
-              {(j.received / 1048576).toFixed(1)} / {j.total ? (j.total / 1048576).toFixed(1) : '…'} MB ·{' '}
-              {tx(platformInfo(j.track.platform).qualityLabels?.[j.quality as 'high'] || 'on.' + j.quality)}
-              {j.resolvedQuality && j.resolvedQuality !== j.quality
-                ? ' → ' +
-                  tx(
-                    platformInfo(j.track.platform).qualityLabels?.[j.resolvedQuality as 'high'] ||
-                      'on.' + j.resolvedQuality,
-                  )
-                : ''}{' '}
-              · {j.source}
-            </small>
-            {j.fallbackReason && <small>{tx('on.qualityFallback')}</small>}
-            {j.lyrics && (
-              <small>
-                {tx('on.lyricFields')}:{' '}
-                {j.lyrics.fields.join(' + ').toUpperCase() ||
-                  tx('on.fields.' + (j.lyrics.status === 'disabled' ? 'none' : 'unavailable'))}
-                {j.lyrics.converted && j.lyrics.fields.includes('ttml') ? ' · ' + tx('on.convertedTtml') : ''}
-              </small>
-            )}
-            {j.metadataWarning && <small role="status">{j.metadataWarning}</small>}
-            {j.info && (
-              <small>
-                {j.info.codec} · {j.info.bits} bit · {j.info.sampleRate / 1000} kHz ·{' '}
-                {Math.round(j.info.bitrate / 1000)} kbps
-              </small>
-            )}
-            {j.error && <small role="status">{j.error}</small>}
-          </div>
-          {['queued', 'resolving', 'downloading'].includes(j.status) && (
-            <Button size="sm" onClick={() => void act('downloadAction', { id: j.id, action: 'pause' })}>
-              {tx('on.pause')}
-            </Button>
-          )}
-          {['paused', 'failed', 'cancelled'].includes(j.status) && (
-            <Button size="sm" onClick={() => void act('downloadAction', { id: j.id, action: 'retry' })}>
-              {tx('on.retry')}
-            </Button>
-          )}
-          {j.status !== 'saving' && j.status !== 'completed' && j.status !== 'cancelled' && (
-            <Button size="sm" onClick={() => void act('downloadAction', { id: j.id, action: 'cancel' })}>
-              {tx('on.cancel')}
-            </Button>
-          )}
-          {['completed', 'failed', 'cancelled', 'paused'].includes(j.status) && (
-            <Button size="sm" onClick={() => void act('downloadAction', { id: j.id, action: 'remove' })}>
-              {tx('on.remove')}
-            </Button>
-          )}
-        </div>
-      ))}
+      <div className={s.rows} ref={downloadWin.ref}>
+        {downloadWin.topPad > 0 && <div style={{ height: downloadWin.topPad }} aria-hidden="true" />}
+        {state.jobs.slice(downloadWin.start, downloadWin.end).map((j) => (
+          <DownloadJobRow key={j.id} j={j} onAction={onJobAction} />
+        ))}
+        {downloadWin.bottomPad > 0 && <div style={{ height: downloadWin.bottomPad }} aria-hidden="true" />}
+      </div>
     </div>
   );
 }

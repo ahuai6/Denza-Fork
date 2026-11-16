@@ -1,7 +1,7 @@
 // The workshop: the full lyric-video desk (picture, transport, timeline, every setting, export). It is the whole web
 // build, and inside the desktop app it is the Lyric workshop page — a separate, fully custom project with an engine of
 // its own, so the player and the workshop never disturb each other.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { tx, LANGS, currentLang, type Lang } from '../../../i18n';
 import type { Session } from '../../../engine';
 import { desktop, offerFile, pickSavePath, D, type Track } from '../../bridge';
@@ -33,7 +33,10 @@ import {
 } from '../../workshop/project';
 import s from './Workshop.module.css';
 import { DialogOwner } from '../../ui/DialogOwner';
-import { TranslationEditor } from '../../ui/TranslationEditor';
+
+const TranslationEditor = lazy(() =>
+  import('../../ui/TranslationEditor').then((m) => ({ default: m.TranslationEditor })),
+);
 
 const TABS: [string, string, string][] = [
   ['lyrics', 'tab.lyrics', 'lyrics'],
@@ -505,15 +508,17 @@ function LyricsPane({ s: ss }: { s: Session }) {
           </Button>
         )}
         {translating && (
-          <TranslationEditor
-            source={text}
-            song={{ title: ss.spec.song.title || '', artist: ss.spec.song.artist || '', album: '' }}
-            apply={(value) => {
-              editing.current = true;
-              setText(value);
-            }}
-            close={() => setTranslating(false)}
-          />
+          <Suspense fallback={null}>
+            <TranslationEditor
+              source={text}
+              song={{ title: ss.spec.song.title || '', artist: ss.spec.song.artist || '', album: '' }}
+              apply={(value) => {
+                editing.current = true;
+                setText(value);
+              }}
+              close={() => setTranslating(false)}
+            />
+          </Suspense>
         )}
         <textarea
           ref={ta}

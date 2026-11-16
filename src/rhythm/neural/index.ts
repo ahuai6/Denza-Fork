@@ -86,7 +86,29 @@ function getWorker(): Worker {
           ? rt.beat(args!.spect)
           : rt.separate(args!.left, args!.right);
       job.then(
-        (result) => w.postMessage({ rpc, result }),
+        (result) => {
+          const seen = new Set<ArrayBuffer>();
+          const push = (arr: unknown) => {
+            if (
+              ArrayBuffer.isView(arr) &&
+              arr.buffer instanceof ArrayBuffer &&
+              arr.byteOffset === 0 &&
+              arr.byteLength === arr.buffer.byteLength
+            ) {
+              seen.add(arr.buffer);
+            }
+          };
+          if (Array.isArray(result)) {
+            for (const s of result) {
+              push((s as { left?: unknown })?.left);
+              push((s as { right?: unknown })?.right);
+            }
+          } else if (result && typeof result === 'object') {
+            push((result as { beat?: unknown }).beat);
+            push((result as { downbeat?: unknown }).downbeat);
+          }
+          w.postMessage({ rpc, result }, [...seen]);
+        },
         (e) => w.postMessage({ rpc, error: String((e as Error)?.message ?? e) }),
       );
       return;

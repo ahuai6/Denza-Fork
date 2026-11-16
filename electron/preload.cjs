@@ -10,6 +10,7 @@ const L = (...a) => ipcRenderer.invoke(...a);
 contextBridge.exposeInMainWorld('cadenzaOnline', {
   request: (operation, args) => L('online:request', operation, args),
   onChanged: on('online:changed'),
+  onProgress: on('online:progress'),
 });
 contextBridge.exposeInMainWorld('cadenzaDesktop', {
   saveDialog: (opts) => L('save-dialog', opts),
