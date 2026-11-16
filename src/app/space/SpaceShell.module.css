@@ -31,6 +31,23 @@
   padding: 5px;
   border-radius: var(--r-pill);
   max-width: calc(100% - 32px);
+  animation: playlistIn var(--t-hud) var(--ease);
+}
+.playlistSwitch[data-closing] {
+  animation: playlistOut var(--t-out) var(--ease-in) forwards;
+  pointer-events: none;
+}
+@keyframes playlistIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px) scale(0.985);
+  }
+}
+@keyframes playlistOut {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -4px) scale(0.985);
+  }
 }
 .playlistSwitch button {
   min-height: 34px;
@@ -38,6 +55,9 @@
   border-radius: var(--r-pill);
   background: transparent;
   cursor: pointer;
+  transition:
+    background var(--t-fast) var(--ease-soft),
+    box-shadow var(--t-fast) var(--ease-soft);
 }
 .playlistSwitch button:hover {
   background: rgba(255, 255, 255, 0.16);

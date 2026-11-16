@@ -9,7 +9,12 @@
   padding: 0;
   overflow: clip;
   z-index: 5;
+  animation: panelIn var(--t-panel) var(--ease);
 } /* (clip: a focused control or a jump to a section can never scroll the card itself, header and all, out of sight) */
+.panel[data-closing] {
+  animation: panelOut var(--t-out) var(--ease-in) forwards;
+  pointer-events: none;
+}
 .head {
   display: flex;
   justify-content: space-between;
@@ -30,6 +35,15 @@
   color: #fff;
   cursor: pointer;
   font: inherit;
+  transition:
+    background var(--t-fast) var(--ease-soft),
+    transform var(--t-fast) var(--ease);
+}
+.close:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+.close:active {
+  transform: scale(0.95);
 }
 .scroll {
   overflow: auto;
@@ -149,6 +163,7 @@
   padding: 10px 12px;
   border-radius: var(--r-1);
   background: rgba(255, 255, 255, 0.1);
+  animation: enter var(--t-med) var(--ease);
 }
 .ask p {
   margin: 0;

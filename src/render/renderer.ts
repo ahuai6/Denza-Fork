@@ -58,15 +58,11 @@ function getShadeCanvas(W: number, H: number): HTMLCanvasElement {
 }
 
 type LayerKey = 'backdrop' | 'world-back' | 'world-front' | 'foreground' | 'screen';
+type CachedLayers = Record<LayerKey, Effect[]> & { deep: Effect[]; flat: Effect[] };
 let cachedFxSig = '';
 let cachedFxCount = -1;
-let cachedLayers: Record<LayerKey, Effect[]> | null = null;
-function getLayerEffects(
-  bgStyle: string,
-  bgFx: Effect,
-  lite: boolean,
-  fx: Record<string, boolean>,
-): Record<LayerKey, Effect[]> {
+let cachedLayers: CachedLayers | null = null;
+function getLayerEffects(bgStyle: string, bgFx: Effect, lite: boolean, fx: Record<string, boolean>): CachedLayers {
   const all = effects('effect');
   let sig = `${bgStyle}|${lite ? 1 : 0}`;
   for (let i = 0; i < all.length; i++) sig += fx[all[i].id] ? '|1' : '|0';
@@ -91,6 +87,8 @@ function getLayerEffects(
     all.filter((x) => x.layer === layer && (fx[x.id] || alwaysOn(x)) && !(lite && LITE_OFF.has(x.id))).sort(byZ);
   cachedLayers = {
     backdrop,
+    deep: backdrop.filter((e) => e.deep),
+    flat: backdrop.filter((e) => !e.deep),
     'world-back': pick('world-back'),
     'world-front': pick('world-front'),
     foreground: pick('foreground'),
@@ -209,8 +207,7 @@ export function drawFrame(g: Ctx, f: RenderFrame, o: DrawOptions) {
     sameAsAmbient = st.bgStyle === 'cover';
   // (lite: the effects that read the whole frame again or blur every frame are left out)
   const lite = gfx() === 'lite',
-    layerEffects = getLayerEffects(st.bgStyle, bgFx, lite, st.fx),
-    bdEffects = layerEffects.backdrop;
+    layerEffects = getLayerEffects(st.bgStyle, bgFx, lite, st.fx);
   const inBackdrop = (c: Ctx) => {
     c.save();
     c.translate(W / 2, H / 2);
@@ -220,8 +217,8 @@ export function drawFrame(g: Ctx, f: RenderFrame, o: DrawOptions) {
   };
   // the deep effects (the glyph pane): over the backdrop's ground and under its elements, by the backdrop's own hook (or
   // right after it, for one without elements); over the song's video when one is up
-  const deepFx = bdEffects.filter((e) => e.deep),
-    flatFx = bdEffects.filter((e) => !e.deep),
+  const deepFx = layerEffects.deep,
+    flatFx = layerEffects.flat,
     mvUp = !!f.media.mv && f.media.mv.k > 0.02;
   const deepOnce = (c: Ctx) => {
     let done = false;

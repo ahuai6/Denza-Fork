@@ -19,19 +19,28 @@ const soft = makeCanvas(SW, SH) as HTMLCanvasElement,
 /** how fast the colours wander (radians a second, the slowest of them) */
 const FLOW = 0.12;
 let lastKey = '';
+let lastColsRef: unknown = null;
+let lastRgbStrings: string[] = [];
 /** Paint the ambient field for time t into the small canvas (blurred) and return it. */
 export function ambientField(f: RenderFrame): HTMLCanvasElement {
   const t = f.t,
     pal = f.ambient,
     img = f.media.cover,
     pulse = f.rs.pulse * 0.07;
-  const key = `${t.toFixed(3)}|${pulse.toFixed(3)}|${f.media.coverKey}|${pal.base.join()}`;
+  // Quantize to ~30Hz for real-time (~0.4px at FLOW=0.12 rad/s), preserving full precision for offline export
+  const qT = f.offline ? Math.round(t * 240) : Math.round(t * 30),
+    qP = f.offline ? Math.round(pulse * 1000) : Math.round(pulse * 120);
+  const key = `${qT}|${qP}|${f.media.coverKey}|${pal.base.join()}`;
   if (key === lastKey) return soft;
   lastKey = key;
+  if (lastColsRef !== pal.cols) {
+    lastColsRef = pal.cols;
+    lastRgbStrings = pal.cols.map((c) => `${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])}`);
+  }
   sx.globalCompositeOperation = 'source-over';
   sx.globalAlpha = 1;
   sx.filter = 'none';
-  sx.fillStyle = `rgb(${pal.base.map(Math.round)})`;
+  sx.fillStyle = `rgb(${Math.round(pal.base[0])},${Math.round(pal.base[1])},${Math.round(pal.base[2])})`;
   sx.fillRect(0, 0, SW, SH);
   if (img)
     for (const [k, sp, sc, x0, y0] of [
@@ -49,20 +58,21 @@ export function ambientField(f: RenderFrame): HTMLCanvasElement {
   // the colours as a liquid: each a long soft shape that wanders the field on a path of two turnings (so it never
   // simply circles), stretching along its own way and turning as it goes — they pour past one another rather than hover
   sx.globalCompositeOperation = 'screen';
-  pal.cols.forEach((col, i) => {
+  pal.cols.forEach((_, i) => {
     const a = t * (FLOW + i * 0.037) + i * 1.7,
       b = t * (FLOW * 0.62 + i * 0.021) + i * 2.9,
       x = SW * (0.5 + 0.3 * Math.cos(a) + 0.2 * Math.cos(b * 1.7 + i)),
       y = SH * (0.5 + 0.3 * Math.sin(a * 1.3 + i * 0.8) + 0.2 * Math.sin(b + i));
     const r = SW * (0.4 + 0.1 * Math.sin(t * 0.33 + i)) * (1 + pulse * (i === 0 ? 1.5 : 0.6)),
       stretch = 1.35 + 0.3 * Math.sin(b * 0.9 + i);
+    const rgb = lastRgbStrings[i] || '255,255,255';
     sx.save();
     sx.translate(x, y);
     sx.rotate(a * 0.8 + i);
     sx.scale(stretch, 1 / stretch);
     const gr = sx.createRadialGradient(0, 0, 0, 0, 0, r);
-    gr.addColorStop(0, `rgba(${col.map(Math.round)},${0.75 - i * 0.08})`);
-    gr.addColorStop(1, `rgba(${col.map(Math.round)},0)`);
+    gr.addColorStop(0, `rgba(${rgb},${0.75 - i * 0.08})`);
+    gr.addColorStop(1, `rgba(${rgb},0)`);
     sx.fillStyle = gr;
     sx.fillRect(-r, -r, 2 * r, 2 * r);
     sx.restore();

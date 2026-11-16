@@ -10,7 +10,7 @@ import { createBind, isNight } from './bind';
 import { hudHtml } from './hud';
 import { PlayerExtras, SpacePanel, WinButtons, type Panel } from './SpacePanels';
 import { SpaceDetail, type Detail } from './SpaceDetail';
-import { ContextMenu, Toast } from '../ui/kit';
+import { ContextMenu, OUT_MS, Toast, Button, usePresence } from '../ui/kit';
 import { menuFor } from '../commands';
 import { targetOf } from './targets';
 import { MiniLyrics } from '../ui/MiniLyrics';
@@ -18,8 +18,8 @@ import { lang as langStore } from '../../i18n';
 import { useStore, settings, ui, openMenu, lib } from '../state';
 import './space.css';
 import s from './SpaceShell.module.css';
+import { SpaceSettings } from './SpaceSettings';
 import { OnlineDialog } from '../ui/OnlineDialog';
-import { Button } from '../ui/kit';
 import { useOnlineSurface } from '../ui/OnlineSurface';
 import { dialogs } from '../actions/dialogs';
 import { DialogOwner } from '../ui/DialogOwner';
@@ -28,7 +28,6 @@ import { tx } from '../../i18n';
 import { request } from '../online/state';
 
 const OnlineMusic = lazy(() => import('../ui/OnlineMusic').then((m) => ({ default: m.OnlineMusic })));
-const SpaceSettings = lazy(() => import('./SpaceSettings').then((m) => ({ default: m.SpaceSettings })));
 
 // every face the scene's textures and the HUD draw with, loaded before the first texture is drawn
 const FACES: [string, string][] = [
@@ -147,6 +146,8 @@ export function SpaceShell() {
     world.current?.pause(mini || away);
     if (onlineOpen) document.exitPointerLock();
   }, [mini, away, gen, lang, ready, onlineOpen]);
+  const playlistBarOpen = ready && !mini && !cfg.open && !onlineOpen && room === 'lists';
+  const { shown: playlistBarShown, closing: playlistBarClosing } = usePresence(playlistBarOpen, OUT_MS);
   const close = () => {
     setView(null);
     world.current?.takePointer();
@@ -166,11 +167,9 @@ export function SpaceShell() {
           dangerouslySetInnerHTML={{ __html: hudHtml() }}
         />
       )}
-      {ready && cfg.open && (
+      {ready && (
         <DialogOwner>
-          <Suspense fallback={null}>
-            <SpaceSettings section={cfg.section} onClose={close} />
-          </Suspense>
+          <SpaceSettings open={cfg.open} section={cfg.section} onClose={close} />
         </DialogOwner>
       )}
       {ready && !mini && (
@@ -180,10 +179,11 @@ export function SpaceShell() {
           </Button>
         </div>
       )}
-      {ready && !mini && !cfg.open && !onlineOpen && room === 'lists' && (
+      {playlistBarShown && (
         <div
           className={'hud card ' + s.playlistSwitch}
           data-test="space-playlist-source"
+          data-closing={!playlistBarOpen || playlistBarClosing || undefined}
           role="group"
           aria-label={tx('on.playlistSource')}
         >
@@ -204,13 +204,11 @@ export function SpaceShell() {
             playlistSource === 'online' && <small>{tx('on.noOnlineLists')}</small>}
         </div>
       )}
-      {onlineOpen && (
-        <OnlineDialog title={tx('on.title')} close={() => setView(null)}>
-          <Suspense fallback={null}>
-            <OnlineMusic />
-          </Suspense>
-        </OnlineDialog>
-      )}
+      <OnlineDialog open={onlineOpen} title={tx('on.title')} close={() => setView(null)}>
+        <Suspense fallback={null}>
+          <OnlineMusic />
+        </Suspense>
+      </OnlineDialog>
       {ready && (
         <PlayerExtras
           host={extra}
@@ -220,7 +218,7 @@ export function SpaceShell() {
           }}
         />
       )}
-      {ready && detail && (
+      {ready && (
         <DialogOwner>
           <SpaceDetail
             detail={detail}
@@ -235,9 +233,9 @@ export function SpaceShell() {
       {ready && <Toast />}
       {ready && <WinButtons host={winHost} />}
       {ready && mini && <MiniLyrics />}
-      {ready && !cfg.open && (
+      {ready && (
         <DialogOwner>
-          <SpacePanel panel={panel} onClose={() => setView(null)} />
+          <SpacePanel panel={cfg.open ? null : panel} onClose={() => setView(null)} />
         </DialogOwner>
       )}
     </div>

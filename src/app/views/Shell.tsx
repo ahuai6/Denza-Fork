@@ -12,6 +12,8 @@ import { player } from '../playback/player';
 import { RHYTHM_VERSION } from '../../engine';
 import mark from '../brand/mark.svg';
 import { LibraryView } from './Library';
+import { PosterWall } from './Wall';
+import { SettingsView } from './Settings';
 import { boot, bindKeys, go } from '../actions/boot';
 import { PlayerCard, QueuePanel } from './Player';
 import { Stage, NowPlaying } from './NowPlaying';
@@ -23,9 +25,10 @@ import { refs, openNp } from '../layers';
 import { MiniLyrics } from '../ui/MiniLyrics';
 import s from './Shell.module.css';
 
-const PosterWall = lazy(() => import('./Wall').then((m) => ({ default: m.PosterWall })));
-const SettingsView = lazy(() => import('./Settings').then((m) => ({ default: m.SettingsView })));
 const WorkshopPage = lazy(() => import('./workshop/Workshop').then((m) => ({ default: m.WorkshopPage })));
+const preloadWorkshop = () => {
+  void import('./workshop/Workshop');
+};
 
 function resolveTheme(t: string) {
   return t === 'light' || t === 'dark' ? t : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -160,12 +163,14 @@ export function Shell() {
         {/* a page turns: the old one fades out, the new one rises in */}
         <Turn k={page} className={s.pageInner} boxClassName={s.pageBox}>
           <Guard name="page" k={page}>
-            <Suspense fallback={null}>
-              {page === 'library' && <LibraryView />}
-              {page === 'wall' && <PosterWall />}
-              {page === 'settings' && <SettingsView />}
-              {page === 'workshop' && <WorkshopPage />}
-            </Suspense>
+            {page === 'library' && <LibraryView />}
+            {page === 'wall' && <PosterWall />}
+            {page === 'settings' && <SettingsView />}
+            {page === 'workshop' && (
+              <Suspense fallback={<div />}>
+                <WorkshopPage />
+              </Suspense>
+            )}
           </Guard>
         </Turn>
       </main>
@@ -233,6 +238,7 @@ function TitleBar() {
             type="button"
             data-page={k}
             aria-current={!onStage && page === k ? 'page' : undefined}
+            onPointerEnter={k === 'workshop' ? preloadWorkshop : undefined}
             onClick={() => (ui.get().page === k ? ui.set({ layer: 'none', queue: false }) : go(k))}
           >
             {tx(label)}

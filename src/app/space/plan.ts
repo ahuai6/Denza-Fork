@@ -102,7 +102,11 @@ export function regionAt(p: P2): Region | null {
     const R = ROOMS[id],
       q = local(p, R.th);
     if (Math.abs(q.lat) < DOOR_HALF - 0.4 && q.along > RING.r1 - 1.5 && q.along < ROOM_IN + 1.5)
-      return { room: q.along < PASSAGE.from + PASSAGE.len / 2 ? 'gallery' : id, top: doorTop, door: true };
+      return {
+        room: q.along < PASSAGE.from + PASSAGE.len / 2 ? 'gallery' : id,
+        top: doorTop,
+        ...(q.along < ROOM_IN + 0.25 ? { door: true as const } : {}),
+      };
     if (R.kind === 'rect') {
       if (q.along > ROOM_IN + M && q.along < ROOM_IN + R.d - M && Math.abs(q.lat) < R.w / 2 - M)
         return { room: id, top: R.h - 0.6 };

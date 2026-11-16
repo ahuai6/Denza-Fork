@@ -2,12 +2,13 @@
 // the play mode, as the classic player card has them. The buttons live in the HUD's player card (a portal into it); the
 // lists open as glass cards above it.
 import { createPortal } from 'react-dom';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { tx } from '../../i18n';
 import { useStore, trackOf, lib, toast, ui } from '../state';
 import { Lib, D } from '../bridge';
 import { Icon } from '../ui/icons';
-import { Seg, Cover } from '../ui/kit';
+import { Seg, Cover, OUT_MS, usePresence } from '../ui/kit';
+import { useOnlineSurface } from '../ui/OnlineSurface';
 import { NpLyrics } from '../ui/NpLyrics';
 import {
   player,
@@ -105,7 +106,12 @@ export function WinButtons({ host }: { host: HTMLElement | null }) {
 export function SpacePanel({ panel, onClose }: { panel: Panel; onClose: () => void }) {
   const session = useStore(player, (x) => x.session),
     hasLyrics = useStore(player, (x) => x.hasLyrics),
-    shownId = useStore(player, (x) => x.shownId || x.id);
+    shownId = useStore(player, (x) => x.shownId || x.id),
+    surface = useOnlineSurface(),
+    lastPanel = useRef<Panel>(null);
+  if (panel) lastPanel.current = panel;
+  const { shown, closing } = usePresence(!!panel, OUT_MS),
+    active = panel || lastPanel.current;
   useEffect(() => {
     if (!panel) return;
     const k = (e: KeyboardEvent) => {
@@ -114,19 +120,35 @@ export function SpacePanel({ panel, onClose }: { panel: Panel; onClose: () => vo
     addEventListener('keydown', k);
     return () => removeEventListener('keydown', k);
   }, [panel, onClose]);
-  if (panel === 'lyrics')
-    return <Lyrics key={shownId || ''} onClose={onClose} hasLyrics={hasLyrics} session={session} shownId={shownId} />;
-  if (panel === 'queue') return <Queue onClose={onClose} />;
+  if (!shown || !active) return null;
+  if (active === 'lyrics')
+    return (
+      <Lyrics
+        key={shownId || ''}
+        closing={!panel || closing}
+        surfaceClass={surface.className}
+        onClose={onClose}
+        hasLyrics={hasLyrics}
+        session={session}
+        shownId={shownId}
+      />
+    );
+  if (active === 'queue')
+    return <Queue closing={!panel || closing} surfaceClass={surface.className} onClose={onClose} />;
   return null;
 }
 
 // the lyric list, and its editor: the song's lyrics as text (LRC, TTML or plain), saved where the settings say
 function Lyrics({
+  closing,
+  surfaceClass,
   onClose,
   hasLyrics,
   session,
   shownId,
 }: {
+  closing?: boolean;
+  surfaceClass: string;
   onClose: () => void;
   hasLyrics: boolean;
   session: ReturnType<typeof player.get>['session'];
@@ -151,7 +173,12 @@ function Lyrics({
     }
   };
   return (
-    <section className={`hud card ${s.panel} ${s.lyr}`} aria-label={tx('s.lyricList')} data-test="space-lyrics">
+    <section
+      className={`hud card ${s.panel} ${s.lyr} ${surfaceClass}`}
+      aria-label={tx('s.lyricList')}
+      data-test="space-lyrics"
+      data-closing={closing || undefined}
+    >
       <header className={s.head}>
         <b>{edit != null ? ts('lyr.edit') : tx('s.lyricList')}</b>
         {edit == null && (
@@ -166,26 +193,24 @@ function Lyrics({
       <button className={s.ghost} onClick={() => setSearching(true)}>
         {tx('s.lyr.online')}
       </button>
-      {searching && (
-        <OnlineDialog title={tx('s.lyr.online')} close={() => setSearching(false)}>
-          <Suspense fallback={null}>
-            <OnlineLyricsSearch
-              key={shownId}
-              song={{
-                title: trackOf(shownId)?.title || '',
-                artist: trackOf(shownId)?.artist || '',
-                album: trackOf(shownId)?.album || '',
-                duration: trackOf(shownId)?.duration,
-              }}
-              apply={async (value) => {
-                await useLyrics(value);
-                setEdit(null);
-                setSearching(false);
-              }}
-            />
-          </Suspense>
-        </OnlineDialog>
-      )}
+      <OnlineDialog open={searching} title={tx('s.lyr.online')} close={() => setSearching(false)}>
+        <Suspense fallback={null}>
+          <OnlineLyricsSearch
+            key={shownId}
+            song={{
+              title: trackOf(shownId)?.title || '',
+              artist: trackOf(shownId)?.artist || '',
+              album: trackOf(shownId)?.album || '',
+              duration: trackOf(shownId)?.duration,
+            }}
+            apply={async (value) => {
+              await useLyrics(value);
+              setEdit(null);
+              setSearching(false);
+            }}
+          />
+        </Suspense>
+      </OnlineDialog>
       {translating && (
         <Suspense fallback={null}>
           <TranslationEditor
@@ -237,7 +262,7 @@ function Lyrics({
   );
 }
 
-function Queue({ onClose }: { onClose: () => void }) {
+function Queue({ closing, surfaceClass, onClose }: { closing?: boolean; surfaceClass: string; onClose: () => void }) {
   const p = useStore(player);
   useStore(lib, (x) => x.tracks);
   const [, bump] = useState(0);
@@ -249,7 +274,12 @@ function Queue({ onClose }: { onClose: () => void }) {
   const items = p.queue.map((id, i) => ({ id, i, t: trackOf(id) })).filter((x) => x.t),
     cur = items.findIndex((x) => x.id === p.id);
   return (
-    <section className={`hud card ${s.panel}`} aria-label={tx('s.queue')} data-test="space-queue">
+    <section
+      className={`hud card ${s.panel} ${surfaceClass}`}
+      aria-label={tx('s.queue')}
+      data-test="space-queue"
+      data-closing={closing || undefined}
+    >
       <header className={s.head}>
         <div>
           <b>{tx('s.queue')}</b>

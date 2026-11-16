@@ -3,19 +3,31 @@ import { createPortal } from 'react-dom';
 import { tx } from '../../i18n';
 import { ui, useStore } from '../state';
 import { dialogs } from '../actions/dialogs';
-import { Button } from './kit';
+import { Button, OUT_MS, usePresence } from './kit';
 import s from './OnlineMusic.module.css';
 import { useOnlineSurface } from './OnlineSurface';
 
-export function OnlineDialog({ title, children, close }: { title: string; children: ReactNode; close(): void }) {
+export function OnlineDialog({
+  open = true,
+  title,
+  children,
+  close,
+}: {
+  open?: boolean;
+  title: string;
+  children: ReactNode;
+  close(): void;
+}) {
   const surface = useOnlineSurface();
   const picture = useStore(ui, (state) => state.layer !== 'none');
+  const { shown, closing } = usePresence(open, OUT_MS);
   const ref = useRef<HTMLElement>(null),
     id = useId(),
     onClose = useRef(close);
   onClose.current = close;
   const active = useStore(ui, (state) => state.dialog === id);
   useLayoutEffect(() => {
+    if (!open) return;
     const prior = document.activeElement;
     const lease = dialogs.claim(id, () => onClose.current());
     return () => {
@@ -26,15 +38,15 @@ export function OnlineDialog({ title, children, close }: { title: string; childr
             prior.focus();
         });
     };
-  }, [id]);
+  }, [id, open]);
   useLayoutEffect(() => {
-    if (active) ref.current?.focus();
-  }, [active]);
+    if (open && active) ref.current?.focus();
+  }, [open, active]);
   useEffect(() => {
-    if (!active) return;
+    if (!open || !active) return;
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (ref.current?.querySelector('[role="listbox"]:not([data-closing])')) return;
+        if (document.querySelector('[role="listbox"]:not([data-closing])')) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         dialogs.dismiss();
@@ -62,11 +74,12 @@ export function OnlineDialog({ title, children, close }: { title: string; childr
     addEventListener('keydown', key, true);
     return () => removeEventListener('keydown', key, true);
   }, [active]);
-  if (!active) return null;
+  if (!shown || (open && !active)) return null;
   return createPortal(
     <div
       className={s.overlay + ' ' + surface.className + (!surface.space && picture ? ' on-picture' : '')}
       data-online-scene={surface.space ? 'space' : 'classic'}
+      data-closing={!open || closing || undefined}
       onKeyDown={(e) => {
         if (e.key !== 'F11') e.stopPropagation();
       }}

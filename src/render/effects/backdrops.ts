@@ -832,6 +832,8 @@ const VSM = makeCanvas(96, 54) as HTMLCanvasElement,
   VSX = VSM.getContext('2d', { willReadFrequently: true })!,
   VTN = makeCanvas(24, 14) as HTMLCanvasElement,
   VTX = VTN.getContext('2d', { willReadFrequently: true })!;
+const VID_LUMA = new WeakMap<object, { t: number; Lm: number; Sm: number }>();
+let vidLumaAnon: { frame: unknown; t: number; Lm: number; Sm: number } | null = null;
 export function drawVideo(
   g: Ctx,
   f: RenderFrame,
@@ -894,26 +896,38 @@ export function drawVideo(
       VSX.fillRect(0, 0, sm, smh);
     }
   }
-  VTX.drawImage(VSM, 0, 0, VTN.width, VTN.height);
   let Lm = 0.15,
     Sm = 0.3;
   if (ok) {
-    const d = VTX.getImageData(0, 0, VTN.width, VTN.height).data;
-    let l = 0,
-      sa = 0,
-      n = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      const r = d[i] / 255,
-        gg = d[i + 1] / 255,
-        b = d[i + 2] / 255,
-        mx = Math.max(r, gg, b),
-        mn = Math.min(r, gg, b);
-      l += 0.2126 * r * r + 0.7152 * gg * gg + 0.0722 * b * b;
-      sa += mx > 0 ? (mx - mn) / mx : 0;
-      n++;
+    const cached = v && typeof v === 'object' ? VID_LUMA.get(v) : vidLumaAnon?.frame === v ? vidLumaAnon : undefined;
+    // Sample video pixels at ~6 Hz during live playback to avoid per-frame synchronous GPU readback stalls
+    if (f.offline || !cached || Math.abs(t - cached.t) >= 0.16) {
+      VTX.drawImage(VSM, 0, 0, VTN.width, VTN.height);
+      const d = VTX.getImageData(0, 0, VTN.width, VTN.height).data;
+      let l = 0,
+        sa = 0,
+        n = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i] / 255,
+          gg = d[i + 1] / 255,
+          b = d[i + 2] / 255,
+          mx = Math.max(r, gg, b),
+          mn = Math.min(r, gg, b);
+        l += 0.2126 * r * r + 0.7152 * gg * gg + 0.0722 * b * b;
+        sa += mx > 0 ? (mx - mn) / mx : 0;
+        n++;
+      }
+      const nextL = l / n,
+        nextS = sa / n;
+      Lm = f.offline || !cached ? nextL : cached.Lm * 0.55 + nextL * 0.45;
+      Sm = f.offline || !cached ? nextS : cached.Sm * 0.55 + nextS * 0.45;
+      const entry = { t, Lm, Sm };
+      if (v && typeof v === 'object') VID_LUMA.set(v, entry);
+      else vidLumaAnon = { frame: v, ...entry };
+    } else {
+      Lm = cached.Lm;
+      Sm = cached.Sm;
     }
-    Lm = l / n;
-    Sm = sa / n;
   }
   const dark = grade.dark,
     target = 0.035 + 0.07 * (1 - dark),
@@ -957,6 +971,7 @@ export function drawVideo(
   g.fillRect(dx, dy, dw, dh);
   g.globalCompositeOperation = 'screen';
   g.globalAlpha = A * (0.1 + 0.05 * (1 - dark) + f.P * 0.02);
+  if (!ok) VTX.drawImage(VSM, 0, 0, VTN.width, VTN.height);
   g.drawImage(VTN, dx, dy, dw, dh);
   g.globalCompositeOperation = 'source-over';
   g.globalAlpha = A;

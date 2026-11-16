@@ -157,10 +157,10 @@ export function createWorld(
   // lights on the floor all come from this one direction — no second, mirrored sun for the windows on the shaded side
   const SUN_DIR = new V3(0.42, 1, 0.18).normalize();
   const lin = (r, g, b) => new THREE.Color().setRGB(r, g, b);
-  const ambLight = new THREE.AmbientLight(NIGHT ? lin(0.5, 0.52, 0.66) : lin(0.72, 0.68, 0.64), Math.PI);
-  scene.add(ambLight); // a little lower: the room was too bright
-  // (at dusk a low warm sun; at midnight the moon: cool and faint)
-  const sun = new THREE.DirectionalLight(NIGHT ? lin(0.16, 0.19, 0.27) : lin(0.38, 0.31, 0.2), Math.PI);
+  const ambLight = new THREE.AmbientLight(NIGHT ? lin(0.46, 0.49, 0.64) : lin(0.64, 0.6, 0.57), Math.PI);
+  scene.add(ambLight); // richer shade depth so sunlit geometry and shadows stand out
+  // (at dusk a low warm sun; at midnight the moon: cool and luminous)
+  const sun = new THREE.DirectionalLight(NIGHT ? lin(0.19, 0.22, 0.32) : lin(0.46, 0.37, 0.23), Math.PI);
   sun.castShadow = true;
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.09;
@@ -190,7 +190,7 @@ export function createWorld(
   const SC_MAX = 64,
     SC = { value: Array.from({ length: SC_MAX }, () => new THREE.Vector4(0, -100, 0, 0)) },
     SC_N = { value: 0 },
-    SC_COL = { value: NIGHT ? new THREE.Color(0.62, 0.5, 0.36) : new THREE.Color(0.5, 0.38, 0.24) };
+    SC_COL = { value: NIGHT ? new THREE.Color(0.68, 0.55, 0.4) : new THREE.Color(0.58, 0.44, 0.28) };
   const skyWash = (m, y0 = 1, y1 = 18, k = 0.55) => {
     m.onBeforeCompile = (sh) => {
       sh.uniforms.uSc = SC;
@@ -2773,7 +2773,7 @@ export function createWorld(
         flat('#fff', {
           map: POOL,
           transparent: true,
-          opacity: 0.5,
+          opacity: 0.65,
           depthWrite: false,
           alphaTest: 0.01,
           blending: THREE.AdditiveBlending,
@@ -3084,7 +3084,10 @@ export function createWorld(
   let lightFrame = 0;
   const composer = new EffectComposer(
     renderer,
-    new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 }),
+    new THREE.WebGLRenderTarget(4, 4, {
+      type: THREE.HalfFloatType,
+      samples: (devicePixelRatio || 1) >= 1.5 ? 2 : 4,
+    }),
   );
   composer.addPass(new RenderPass(scene, camera));
   const ink = new InkPass(scene, camera, () => noLine, C.ink);
@@ -3098,7 +3101,7 @@ export function createWorld(
   composer.addPass(shafts);
   const dream = new DreamPass(camera, () => ink.rt.depthTexture, lightInView, C.wheat);
   composer.addPass(dream);
-  const glow = new UnrealBloomPass(new V2(4, 4), 0.32, 0.7, 1.1);
+  const glow = new UnrealBloomPass(new V2(4, 4), 0.42, 0.85, 0.92);
   composer.addPass(glow);
   composer.addPass(new OutputPass());
   const fxaa = new ShaderPass(FXAAShader);
@@ -3319,7 +3322,8 @@ export function createWorld(
     dream.enabled = S.dream !== false;
     glow.enabled = S.dream !== false && S.gfx !== 'lite';
     ink.mat.uniforms.w.value = { thin: 0.8, mid: 1.2, bold: 1.8 }[S.line] || 1.2;
-    const size = { high: 4096, mid: 2048, low: 1024 }[S.shadow] || 4096;
+    const rawSize = { high: 4096, mid: 2048, low: 1024 }[S.shadow] || 4096,
+      size = S.gfx === 'optimized' ? Math.min(2048, rawSize) : rawSize;
     if (size !== shadowSize) {
       shadowSize = size;
       fitSun(size);
@@ -3769,10 +3773,10 @@ export function createWorld(
   // surrounds behind the shoulders, the low notes on the floor to one side. Each plays its own part of the song.
   const FIELD = [
     ['C', 0],
-    ['L', -30],
-    ['R', 30],
-    ['SL', -110],
-    ['SR', 110],
+    ['L', -38],
+    ['R', 38],
+    ['SL', -112],
+    ['SR', 112],
     ['LFE', -62],
   ].map(([feed, deg]) => {
     const th = PL.ROOMS.listening.th + (deg * Math.PI) / 180,
@@ -3784,7 +3788,7 @@ export function createWorld(
       ry: Math.atan2(SANCT.c.x - p.x, SANCT.c.z - p.z),
       feed,
       field: true,
-      level: feed === 'LFE' ? 0.6 : 0.45,
+      level: feed === 'LFE' ? 0.65 : feed === 'C' ? 0.34 : feed === 'SL' || feed === 'SR' ? 0.54 : 0.58,
     };
   });
   SPEAKERS.push(...FIELD);
@@ -3997,7 +4001,10 @@ export function createWorld(
   }
   const sightRay = new THREE.Raycaster();
   // the band of the screen the HUD leaves free (in NDC): under the places and the room's sign, over the subtitles and the player
+  let bandCache: { t: number; v: { yTop: number; yBot: number } } | null = null;
   function freeBand() {
+    const now = performance.now();
+    if (bandCache && now - bandCache.t < 400) return bandCache.v;
     const H = innerHeight || 1;
     let top = innerHeight * 0.1,
       bot = innerHeight * 0.86;
@@ -4010,7 +4017,9 @@ export function createWorld(
       const r = pl.getBoundingClientRect();
       if (r.height > 1) bot = Math.min(bot, r.top - 74);
     } // (the subtitles sit just over the player)
-    return { yTop: 1 - (2 * top) / H, yBot: 1 - (2 * bot) / H };
+    const v = { yTop: 1 - (2 * top) / H, yBot: 1 - (2 * bot) / H };
+    bandCache = { t: now, v };
+    return v;
   }
   const air = new AirLyrics({
     scene,
@@ -4179,15 +4188,20 @@ export function createWorld(
     tone(_b, tintNow, 0.78, 1, 0.3, 0.85);
     beatFloor.material.uniforms.hot.value.set(C.apricot).lerp(_b, A * 0.8);
   }
+  let wakeUntil = performance.now() + 1200,
+    lastRenderAt = 0;
+  const wakeScene = (ms = 600) => {
+    wakeUntil = Math.max(wakeUntil, performance.now() + ms);
+  };
+  for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown', 'resize'] as const)
+    onW(ev, () => wakeScene(650), { passive: true });
   const gp = new V3(),
     gd = new V3(),
     camDir = new V3();
   function frame(now) {
     if (!alive) return;
     requestAnimationFrame(frame);
-    frameN++;
-    const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
-    last = now; // (the first frame can be stamped before the loop began)
+    if (paused || document.hidden) return;
     NOW = fakeNow ? { ...fakeNow, t: ((performance.now() - fakeNow.t0) / 1000) * (fakeNow.rate || 1) } : bind.now();
     songT = NOW.t;
     {
@@ -4203,9 +4217,27 @@ export function createWorld(
       playing = NOW.playing;
       $('pp').textContent = playing ? '❚❚' : '▶';
       $('pp').setAttribute('aria-label', ts(playing ? 'pause' : 'play'));
+      wakeScene(800);
     }
     sound.ambientTick(now, !!NOW.busy);
-    if (paused) return; // (the small window, or the window down in the taskbar: nothing of the scene is worked out or drawn)
+    // When completely stationary and idle (no playback, flight, keys, look, or transition), pace background render to ~30fps
+    const settling =
+      frameN < 30 ||
+      playing ||
+      now < wakeUntil ||
+      locked ||
+      looking ||
+      keys.size > 0 ||
+      walk.flying ||
+      me.vel.lengthSq() > 1e-4 ||
+      air.lines.length > 0 ||
+      Math.abs(tintAmt - tintAmtGoal) > 0.005 ||
+      Math.abs(tierGoal - tierAt) > 0.002;
+    if (!settling && now - lastRenderAt < 32) return;
+    lastRenderAt = now;
+    frameN++;
+    const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
+    last = now; // (the first frame can be stamped before the loop began)
     if (NOW.id !== nowId) {
       nowId = NOW.id;
       $('p-title').textContent = NOW.title || ts('nothing');
@@ -4299,7 +4331,7 @@ export function createWorld(
     // the clear-sky panels brighten with the accents as the beams do
     for (const d of domes) if (d.sky?.material?.color) d.sky.material.color.setScalar(1.05 * (1 + 0.35 * swell));
     shafts.mat.uniforms.gain.value =
-      0.145 * (S.beams ? 1 : 0) * S.fxBeams * (1 + 0.9 * swell + (P.beatBeams ? 0.35 * beatPush : 0));
+      0.21 * (S.beams ? 1 : 0) * S.fxBeams * (1 + 0.95 * swell + (P.beatBeams ? 0.4 * beatPush : 0));
     // the floor of the crossing: ripples spread out every 8 s; pools follow the beat and breathe on their own phase
     lightPools.forEach((m, k) => {
       const t = now / 1000,
@@ -4697,6 +4729,9 @@ export function createWorld(
       sound.dispose();
       air.dispose();
       composer.dispose?.();
+      ink.dispose();
+      shafts.dispose();
+      uiGlass.dispose();
       renderer.dispose();
       delete window.__cad;
     },

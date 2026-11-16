@@ -113,3 +113,34 @@
 3. **未来合并 Cadenza 主程序上游时的冲突注意点**：
    - **底座与架构高冲突文件**：`vite.config.ts`、`package.json`、`electron/library.cjs`、`src/app/main.tsx`、`src/app/views/Shell.tsx`、`src/app/views/Library.tsx`、`src/app/views/Wall.tsx`、`src/app/views/Effect.tsx`、`src/app/views/workshop/Workshop.tsx`、`src/app/space/SpaceShell.tsx`、`src/app/space/SpaceDetail.tsx`、`src/app/space/SpacePanels.tsx`、`src/render/renderer.ts`、`src/director/fit.ts`、`src/rhythm/neural/index.ts`、`src/rhythm/neural/gpu.worker.ts`、`src/rhythm/neural/wgsl/percussive.ts`。
    - **合并准则**：合并上游 Cadenza 时**必须保留** `SpaceShell` 的 `.onlineControl` 独立扩展入口定位、`online/library-links.cjs` 挂载钩子、`library.cjs` 中 `P.remotePlaylists` / `importFile` / `view()` 分片逻辑、以及 `vite.config.ts` 中桌面端多 Chunk + `file:` CSP 规则。如上游重构了 `Shell` / `Library` / `TrackList` 导入或重排逻辑，优先以“保留本轮懒加载包装、共享 ref 及扩展点”的方式手动解决冲突，避免直接 `ours`/`theirs` 覆盖。
+
+---
+
+## 本轮接手交接：3.2.9-denza.7（UX 修复 / 优雅动效 / 空间光影 / 聆听室 5.1 / 2D-3D 管线优化）
+
+- **基线与工作分支**：基于 `custom`（`9289eb5`），在 `feat/ux-atmosphere-motion-perf` 完成修改并合并回 `custom`。
+
+### 涉及文件与关键改动详表
+
+| 模块 | 关键改动 |
+| --- | --- |
+| 在线文案与对话框（[main.tsx](file:///c:/Users/33318/Documents/Denza-Fork/src/app/main.tsx)、[OnlineDialog.tsx](file:///c:/Users/33318/Documents/Denza-Fork/src/app/ui/OnlineDialog.tsx)、[OnlineSurface.module.css](file:///c:/Users/33318/Documents/Denza-Fork/src/app/ui/OnlineSurface.module.css)、[OnlineMusic.module.css](file:///c:/Users/33318/Documents/Denza-Fork/src/app/ui/OnlineMusic.module.css)） | 主入口静态预注册 `./online/words` 消除启动 `on.short` / `on.close`；`OnlineDialog` 接入 `usePresence` 退场动画并拦截下级弹层打开时的误触 `Escape`；`.spacePopup` 与空间 `[role="listbox"]` / `[role="menu"]` 使用 `rgba(24, 20, 16, 0.78)` + `blur(22px) saturate(1.3)` 保障可读性，同时保持 `[role="dialog"].card` 透明底+单层马赛克契约。 |
+| 经典设置与折叠动画（[Shell.tsx](file:///c:/Users/33318/Documents/Denza-Fork/src/app/views/Shell.tsx)、[Settings.tsx](file:///c:/Users/33318/Documents/Denza-Fork/src/app/views/Settings.tsx)、[Settings.module.css](file:///c:/Users/33318/Documents/Denza-Fork/src/app/views/Settings.module.css)） | 直接导入零体积碎片化的 `PosterWall` 与 `SettingsView`（根因：`Effect.tsx` 已静态导入 `MvLook` 使旧 `Settings` 分块为 `0 KB`），保留 `WorkshopPage` 懒加载并预加载；高级设置采用 `.advWrap`/`.advInner` CSS Grid 展开动画配合 `inert` 与 `aria-hidden` 联动。 |
+| 统一优雅动效令牌与面板过渡（[tokens.css](file:///c:/Users/33318/Documents/Denza-Fork/src/app/styles/tokens.css)、[base.css](file:///c:/Users/33318/Documents/Denza-Fork/src/app/styles/base.css)、[kit.tsx](file:///c:/Users/33318/Documents/Denza-Fork/src/app/ui/kit.tsx)、[kit.module.css](file:///c:/Users/33318/Documents/Denza-Fork/src/app/ui/kit.module.css)、[SpaceSettings](file:///c:/Users/33318/Documents/Denza-Fork/src/app/space/SpaceSettings.tsx)、[SpaceDetail.tsx](file:///c:/Users/33318/Documents/Denza-Fork/src/app/space/SpaceDetail.tsx)、[SpacePanels](file:///c:/Users/33318/Documents/Denza-Fork/src/app/space/SpacePanels.tsx)、[SpaceShell.tsx](file:///c:/Users/33318/Documents/Denza-Fork/src/app/space/SpaceShell.tsx)、[space.css](file:///c:/Users/33318/Documents/Denza-Fork/src/app/space/space.css)） | 在 `tokens.css` 收敛柔和缓出曲线 `--ease: cubic-bezier(0.22, 1, 0.36, 1)`、`--ease-soft`、`--ease-in` 与退场/抬头时长（严格满足 `arch.test.ts` 对 `.css` 禁止硬编码 `ms` 的约束）；`MenuList` 二级子菜单与所有空间面板（设置、详情、添加歌单、歌词/队列、`Ask` 确认）补齐 `usePresence` 退场；`base.css` 关闭 `[role='dialog']:focus-visible` 外框以防在空间中与 `GlassPass` 构成双层边框。 |
+| 空间光影、马赛克与 3D 渲染管线（[passes.ts](file:///c:/Users/33318/Documents/Denza-Fork/src/app/space/render/passes.ts)、[world.ts](file:///c:/Users/33318/Documents/Denza-Fork/src/app/space/world.ts)） | 移除 `InkPass` 线性颗粒底噪与 `DreamPass` `+0.02` 黑位抬高去灰雾，并保留增强后的太阳光柱与泛光雕塑光影对比；`InkPass` 天空像素早期跳过 + `38m` 外省去次环；`ShaftsPass` 增加视锥裁剪 + `0.55x HalfFloatType beamRt` + 无可见光束时经 `hasBeam=0` 零额外渲染目标直通（已排查 `vis===0` 清除颜色污染风险）；`GlassPass` 扩展上限至 `GLASS_MAX=24`、支持 `[data-glass-skip]`/`[data-closing]` 剔除、使用 `MutationObserver + 250ms` 节流 DOM 布局读取并对亮底马赛克适度压暗提升白字对比；`world.ts` 实施高分屏 MSAA 降倍（`dpr>=1.5 -> 2`）、`optimized` 阴影贴图上限 `2048`、`freeBand` 400ms 缓存、静止态 ~30fps 空闲帧节流与完整 `dispose()` 资源回收。 |
+| 聆听室 5.1 声场与入室判定（[plan.ts](file:///c:/Users/33318/Documents/Denza-Fork/src/app/space/plan.ts)、[systems/audio.ts](file:///c:/Users/33318/Documents/Denza-Fork/src/app/space/systems/audio.ts)、[world.ts](file:///c:/Users/33318/Documents/Denza-Fork/src/app/space/world.ts)） | `plan.ts` 保留廊道重叠行走区间同时仅在 `along < ROOM_IN + 0.25` 标 `door: true`，避免走进聆听室 1.5m 内仍停留在 `'gallery'` 不亮灯；`RoomAudio` 确保全局仅创建 1 个共用 `ChannelSplitterNode(2)`，扩展 `FIELD` `L/R` 摆角至 `±38°`，重构立体声上混矩阵（前后左右交叉抑制 `0.95/-0.18` 与延时环绕 `0.84/-0.62` + `14/18ms` + `5200Hz LP`）防止居中音频全塌陷进中置。 |
+| 2D 特效歌词与背景管线（[backdrops.ts](file:///c:/Users/33318/Documents/Denza-Fork/src/render/effects/backdrops.ts)、[ambient.ts](file:///c:/Users/33318/Documents/Denza-Fork/src/render/effects/ambient.ts)、[engine.ts](file:///c:/Users/33318/Documents/Denza-Fork/src/engine/engine.ts)、[renderer.ts](file:///c:/Users/33318/Documents/Denza-Fork/src/render/renderer.ts)、[cover.ts](file:///c:/Users/33318/Documents/Denza-Fork/src/render/effects/cover.ts)） | 实时视频背景降频采样（`~6 Hz` + 平滑滤波 `VID_LUMA` 缓存）替代每帧同步 `getImageData` GPU 回读；`ambientField` 键量化至 ~30Hz 并复用 `rgb(...)` 字符串；`Engine` 在页面隐藏或暂停态节流至 ~25fps 且暂停时不再无效清画；`getLayerEffects` 缓存 `deep/flat` 列表；`cover` 模糊临时画布默认档上限 `768px`。 |
+
+### Before / After 实测数据对比
+
+| 指标 | denza.6（Before） | denza.7（After） |
+| --- | --- | --- |
+| 空间左上角启动文案 | `"on.short"`（点击后恢复 `"在线"`） | 首次挂载即 `"在线"`，弹层内 `"关闭"` |
+| 经典设置打开耗时 | 前 1–6 帧均未挂载设置标题（白屏延迟） | 第 1 帧即显示 `<h1>设置</h1>` |
+| 空间静止空闲渲染频率 | 未限频随屏幕刷新率空转（实测 ~`240 FPS` / `4.17ms`） | 空闲降至 ~`690 clears/s`（~`28.8 FPS`）；操作/播放立即恢复 ~`210 FPS` |
+| 经典暂停态无操作背景绘制 | `engine.dirty: true` 持续调度 | 暂停且无需重绘时 `0 fills/s` |
+| 聆听室 5.1 声场实测（4 秒四段 WAV） | 原逻辑 `door: true` 延后 `ROOM_IN + 1.5m`，且窄立体声偏中置 | 6 只音箱全 `lit: true`、共用 1 个分路器；`L-only` 段 `L=0.131/0.0918` 远超 `R=0.0173/0.0252`（`R-only` 对称翻转，`Surround` 段 `C=0, LFE=0`、环绕约为前置 2x） |
+
+### 后续接手与上游合并注意点
+
+- **未覆盖范围**：本地未安装 `playwright` 与 `cargo`，原版完整图形端到端测试、Windows 实体音频与真机 GPU 表现、真实账号与线上服务可用性未在本机执行；若后续同步 Cadenza 上游，请注意合并冲突集中点：`base.css` `[role='dialog']:focus-visible`、`Shell.tsx` 非懒加载 `PosterWall`/`SettingsView`、`space/passes.ts`、`space/world.ts` 帧节流与光影参数、`space/plan.ts` 侧房门口判断、`space/systems/audio.ts` 声场矩阵、`engine.ts`/`backdrops.ts`/`ambient.ts`/`cover.ts` 缓存策略。
