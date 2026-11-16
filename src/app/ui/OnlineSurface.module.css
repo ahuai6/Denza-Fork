@@ -59,17 +59,15 @@
     0 0 0 1.5px rgba(255, 255, 255, 0.8),
     0 8px 24px -12px rgba(38, 28, 18, 0.45);
 }
-/* Floating popups and menus overlap DOM text below them; give them real CSS backdrop blur and darker glass backing. */
+/* Floating popups and menus receive the WebGL GlassPass mosaic (via .card) plus a subtle warm glaze for contrast. */
 .space[role='listbox'],
 .space[role='menu'],
 .spacePopup {
   color: #fff;
-  background: rgba(24, 20, 16, 0.78);
-  -webkit-backdrop-filter: blur(22px) saturate(1.3);
-  backdrop-filter: blur(22px) saturate(1.3);
-  box-shadow:
-    inset 0 0 0 1.25px rgba(255, 255, 255, 0.72),
-    0 14px 36px -8px rgba(18, 14, 10, 0.6);
+  background: rgba(26, 20, 15, 0.28);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 14px 36px -8px rgba(18, 14, 10, 0.55);
 }
 .lite[role='listbox'],
 .lite[role='menu'],
@@ -77,6 +75,9 @@
   background: rgba(34, 28, 23, 0.92);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+  box-shadow:
+    0 0 0 1.5px rgba(255, 255, 255, 0.8),
+    0 14px 36px -8px rgba(18, 14, 10, 0.6);
 }
 .space[role='menu'] button {
   color: #fff;

@@ -157,10 +157,10 @@ export function createWorld(
   // lights on the floor all come from this one direction — no second, mirrored sun for the windows on the shaded side
   const SUN_DIR = new V3(0.42, 1, 0.18).normalize();
   const lin = (r, g, b) => new THREE.Color().setRGB(r, g, b);
-  const ambLight = new THREE.AmbientLight(NIGHT ? lin(0.46, 0.49, 0.64) : lin(0.64, 0.6, 0.57), Math.PI);
+  const ambLight = new THREE.AmbientLight(NIGHT ? lin(0.42, 0.45, 0.62) : lin(0.6, 0.56, 0.53), Math.PI);
   scene.add(ambLight); // richer shade depth so sunlit geometry and shadows stand out
   // (at dusk a low warm sun; at midnight the moon: cool and luminous)
-  const sun = new THREE.DirectionalLight(NIGHT ? lin(0.19, 0.22, 0.32) : lin(0.46, 0.37, 0.23), Math.PI);
+  const sun = new THREE.DirectionalLight(NIGHT ? lin(0.22, 0.25, 0.36) : lin(0.5, 0.4, 0.25), Math.PI);
   sun.castShadow = true;
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.09;
@@ -190,7 +190,7 @@ export function createWorld(
   const SC_MAX = 64,
     SC = { value: Array.from({ length: SC_MAX }, () => new THREE.Vector4(0, -100, 0, 0)) },
     SC_N = { value: 0 },
-    SC_COL = { value: NIGHT ? new THREE.Color(0.68, 0.55, 0.4) : new THREE.Color(0.58, 0.44, 0.28) };
+    SC_COL = { value: NIGHT ? new THREE.Color(0.74, 0.6, 0.44) : new THREE.Color(0.65, 0.49, 0.31) };
   const skyWash = (m, y0 = 1, y1 = 18, k = 0.55) => {
     m.onBeforeCompile = (sh) => {
       sh.uniforms.uSc = SC;
@@ -3106,7 +3106,14 @@ export function createWorld(
   composer.addPass(new OutputPass());
   const fxaa = new ShaderPass(FXAAShader);
   composer.addPass(fxaa);
-  const uiGlass = new GlassPass(() => renderer.getPixelRatio());
+  let wakeUntil = performance.now() + 1200;
+  const wakeScene = (ms = 600) => {
+    wakeUntil = Math.max(wakeUntil, performance.now() + ms);
+  };
+  const uiGlass = new GlassPass(
+    () => renderer.getPixelRatio(),
+    () => wakeScene(650),
+  );
   composer.addPass(uiGlass);
 
   function fitSun(size) {
@@ -4188,11 +4195,7 @@ export function createWorld(
     tone(_b, tintNow, 0.78, 1, 0.3, 0.85);
     beatFloor.material.uniforms.hot.value.set(C.apricot).lerp(_b, A * 0.8);
   }
-  let wakeUntil = performance.now() + 1200,
-    lastRenderAt = 0;
-  const wakeScene = (ms = 600) => {
-    wakeUntil = Math.max(wakeUntil, performance.now() + ms);
-  };
+  let lastRenderAt = 0;
   for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown', 'resize'] as const)
     onW(ev, () => wakeScene(650), { passive: true });
   const gp = new V3(),
@@ -4331,7 +4334,7 @@ export function createWorld(
     // the clear-sky panels brighten with the accents as the beams do
     for (const d of domes) if (d.sky?.material?.color) d.sky.material.color.setScalar(1.05 * (1 + 0.35 * swell));
     shafts.mat.uniforms.gain.value =
-      0.21 * (S.beams ? 1 : 0) * S.fxBeams * (1 + 0.95 * swell + (P.beatBeams ? 0.4 * beatPush : 0));
+      0.25 * (S.beams ? 1 : 0) * S.fxBeams * (1 + 0.95 * swell + (P.beatBeams ? 0.42 * beatPush : 0));
     // the floor of the crossing: ripples spread out every 8 s; pools follow the beat and breathe on their own phase
     lightPools.forEach((m, k) => {
       const t = now / 1000,

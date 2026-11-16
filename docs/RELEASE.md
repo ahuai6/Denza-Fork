@@ -1,3 +1,8 @@
+## Denza-Fork 3.2.9-denza.8
+
+- 修复空间模式下展开的下拉框（`DropList`）、右键菜单与二级子菜单（`MenuList`）、搜索列表（`#results`）及“添加到歌单”（`.addTo`）未应用 WebGL `GlassPass` 马赛克背景特效的问题：移除对下拉框/菜单的 `data-glass-skip` 排除，修正 `GlassPass` 叠层覆盖判定（`k >= inside`）与底层白边遮罩（`ring *= 1. - k`），并在弹出框与底层面板重叠处自动使用 `mask-composite: exclude` 镂空底层 DOM 文本，使展开栏同时具备清晰的 WebGL 马赛克背景特效与零文字串透可读性。
+- 修复 `GlassPass` 在阳光墙面背景上因 `min(m, 0.68)` 硬截断导致马赛克色块被压平为纯灰块的问题，改为平滑色调映射保留明暗色块层次；同步卡片开合动画 `opacity` 至 WebGL 马赛克与白边并唤醒空间渲染循环，进一步加深空间阳光与阴影光影氛围。
+
 ## Denza-Fork 3.2.9-denza.7
 
 - 修复空间左上角“在线 / 关闭”文案在懒加载完成前显示 `on.short / on.close` 的问题，确保启动即显示正确语言文案。

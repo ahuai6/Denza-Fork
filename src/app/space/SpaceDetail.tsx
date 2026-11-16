@@ -306,7 +306,7 @@ function AddTo({ ids, closing, onDone }: { ids: string[]; closing?: boolean; onD
     onDone();
   };
   return (
-    <div className={s.addTo} role="dialog" aria-label={tx('s.addToPl')} data-closing={closing || undefined}>
+    <div className={'card ' + s.addTo} role="dialog" aria-label={tx('s.addToPl')} data-closing={closing || undefined}>
       <form
         className={s.newRow}
         onSubmit={(e) => {

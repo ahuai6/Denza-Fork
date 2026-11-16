@@ -393,15 +393,20 @@ const GLASS_MAX = 24;
 export class GlassPass extends Pass {
   readonly mat: THREE.ShaderMaterial;
   private rects = Array.from({ length: GLASS_MAX }, () => new THREE.Vector4());
-  private radii: number[] = new Array(GLASS_MAX).fill(0);
+  private meta = Array.from({ length: GLASS_MAX }, () => new THREE.Vector4());
   private q: FullScreenQuad;
   private dirtyUntil = 0;
   private lastCollect = 0;
+  private masked = new Set<HTMLElement>();
   private mo: MutationObserver | null = null;
   private onMark = () => {
-    this.dirtyUntil = performance.now() + 600;
+    this.dirtyUntil = performance.now() + 650;
+    this.onWake?.();
   };
-  constructor(private pixelRatio: () => number) {
+  constructor(
+    private pixelRatio: () => number,
+    private onWake?: () => void,
+  ) {
     super();
     this.needsSwap = true;
     this.mat = new THREE.ShaderMaterial({
@@ -412,26 +417,30 @@ export class GlassPass extends Pass {
         tDiffuse: { value: null },
         res: { value: new THREE.Vector2(1, 1) },
         rects: { value: this.rects },
-        radii: { value: this.radii },
+        meta: { value: this.meta },
         n: { value: 0 },
         block: { value: 14 },
         lw: { value: 1.5 },
         tint: { value: new THREE.Color(0.98, 0.96, 0.92) },
       },
-      fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 res; uniform vec4 rects[${GLASS_MAX}]; uniform float radii[${GLASS_MAX}]; uniform int n; uniform float block, lw; uniform vec3 tint; varying vec2 vUv;
-        void main(){ vec4 c = texture2D(tDiffuse, vUv); vec2 p = vUv*res; float inside = 0., ring = 0.; vec4 own = vec4(0.);
-          for (int i = 0; i < ${GLASS_MAX}; i++) { if (i >= n) break; vec4 r = rects[i]; vec2 hs = r.zw*.5; float rad = min(radii[i], min(hs.x, hs.y)); vec2 q = abs(p-(r.xy+hs))-hs+rad;
-            float d = length(max(q, 0.)) + min(max(q.x, q.y), 0.) - rad, k = 1.-smoothstep(-1., 1., d); if (k > inside) { inside = k; own = r; }
+      fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 res; uniform vec4 rects[${GLASS_MAX}]; uniform vec4 meta[${GLASS_MAX}]; uniform int n; uniform float block, lw; uniform vec3 tint; varying vec2 vUv;
+        void main(){ vec4 c = texture2D(tDiffuse, vUv); vec2 p = vUv*res; float inside = 0., ring = 0., pop = 0.; vec4 own = vec4(0.);
+          for (int i = 0; i < ${GLASS_MAX}; i++) { if (i >= n) break; vec4 r = rects[i], ma = meta[i]; vec2 hs = r.zw*.5; float rad = min(ma.x, min(hs.x, hs.y)), al = ma.y; vec2 q = abs(p-(r.xy+hs))-hs+rad;
+            float d = length(max(q, 0.)) + min(max(q.x, q.y), 0.) - rad, k = (1.-smoothstep(-1., 1., d)) * al;
+            ring *= 1. - k;
+            if (k > .001 && (ma.z > pop + .1 || k >= inside - .001)) { inside = max(inside, k); own = r; pop = max(pop, ma.z * step(.01, k)); }
             // the card's white frame, from the very same shape as its glass: it sits over the glass's edge like a mask
-            ring = max(ring, 1. - smoothstep(lw*.5 - .7, lw*.5 + .7, abs(d - lw*.25))); }
+            ring = max(ring, (1. - smoothstep(lw*.5 - .7, lw*.5 + .7, abs(d - lw*.25))) * al); }
           // the mosaic glass: each block shows the average of what is behind it
           // (the blocks are laid from the card's own corner and sized so whole blocks fill it exactly: no cut-off row at
           // its top or bottom, no column cut at its sides)
           if (inside > 0.) { vec2 bs = own.zw / max(vec2(1.), floor(own.zw/block + .5)), b = own.xy + (floor((p - own.xy)/bs) + .5)*bs; vec3 m = vec3(0.);
             for (int k = 0; k < 16; k++) { vec2 o = (vec2(float(k - (k/4)*4), float(k/4)) - 1.5)/4.*bs*1.6; m += texture2D(tDiffuse, (b+o)/res).rgb; }
-            // Softly mute bright mosaic tiles and glaze with warm ink so white HUD labels remain crisp over sunlit walls
-            m = m/16.; float ml = dot(m, vec3(.3,.55,.15)); m = mix(m, vec3(ml), .26); m = min(m, vec3(.68)) * .74 + vec3(.03, .026, .022); c.rgb = mix(c.rgb, m, inside); }
-          c.rgb = mix(c.rgb, vec3(1.), ring * .82);
+            // Smooth filmic shoulder preserves mosaic tile contrast on sunlit walls while keeping white text crisp
+            m = m/16.; float ml = dot(m, vec3(.3,.55,.15)); m = mix(m, vec3(ml), .22);
+            m = (m / (1. + m * (pop > .5 ? .92 : .42))) * (pop > .5 ? .74 : .90);
+            c.rgb = mix(c.rgb, m, inside); }
+          c.rgb = mix(c.rgb, vec3(1.), ring * .85);
           gl_FragColor = c; }`,
     });
     this.q = new FullScreenQuad(this.mat);
@@ -449,16 +458,29 @@ export class GlassPass extends Pass {
   override dispose() {
     this.mo?.disconnect();
     this.mo = null;
+    this.clearMasks();
     if (typeof window !== 'undefined') window.removeEventListener('resize', this.onMark);
     this.mat.dispose();
     this.q.dispose();
   }
+  private clearMasks() {
+    for (const el of this.masked) {
+      el.style.maskImage = '';
+      el.style.maskSize = '';
+      el.style.maskPosition = '';
+      el.style.maskRepeat = '';
+      el.style.maskComposite = '';
+      el.style.removeProperty('-webkit-mask-composite');
+    }
+    this.masked.clear();
+  }
   override setSize(w: number, h: number) {
-    this.dirtyUntil = performance.now() + 200;
+    this.dirtyUntil = performance.now() + 250;
     this.mat.uniforms.res.value.set(w, h);
   }
   invalidate() {
-    this.dirtyUntil = performance.now() + 500;
+    this.dirtyUntil = performance.now() + 650;
+    this.onWake?.();
   }
   private collect() {
     const now = performance.now();
@@ -466,27 +488,101 @@ export class GlassPass extends Pass {
     if (now > this.dirtyUntil && now - this.lastCollect < 250) return;
     this.lastCollect = now;
     const pr = this.pixelRatio();
-    let n = 0;
-    for (const el of document.querySelectorAll<HTMLElement>('.card')) {
-      if (n >= GLASS_MAX || el.hidden || el.dataset.glassSkip !== undefined || el.dataset.closing !== undefined)
-        continue;
-      if (!el.offsetParent && getComputedStyle(el).position !== 'fixed') continue;
+    const rawCards = [...document.querySelectorAll<HTMLElement>('.card')];
+    const tierOf = (el: HTMLElement) => {
+      const role = el.getAttribute('role');
+      if (role === 'listbox' || role === 'menu' || el.id === 'results' || el.id === 'tip') return 2;
+      if (role === 'dialog' || el.dataset.test?.startsWith('space-')) return 1;
+      return 0;
+    };
+    rawCards.sort((a, b) => tierOf(a) - tierOf(b));
+    let n = 0,
+      animating = false;
+    const popups: { el: HTMLElement; r: DOMRect }[] = [];
+    for (const el of rawCards) {
+      if (n >= GLASS_MAX || el.hidden || el.dataset.glassSkip !== undefined) continue;
+      const cs = getComputedStyle(el);
+      if (!el.offsetParent && cs.position !== 'fixed') continue;
+      if (el.closest('[hidden]')) continue;
+      let alpha = parseFloat(cs.opacity);
+      if (Number.isNaN(alpha)) alpha = 1;
+      const p = el.parentElement;
+      if (p) {
+        const pa = parseFloat(getComputedStyle(p).opacity);
+        if (!Number.isNaN(pa) && pa < 1) alpha *= pa;
+      }
+      if (el.dataset.closing !== undefined || alpha < 0.99) animating = true;
+      if (alpha <= 0.01) continue;
       const r = el.getBoundingClientRect();
       if (r.width < 2 || r.height < 2 || r.right <= 0 || r.bottom <= 0 || r.left >= innerWidth || r.top >= innerHeight)
         continue;
-      if (el.closest('[hidden]')) continue;
       const sz = (r.width | 0) + 'x' + (r.height | 0);
       if (el.dataset.sz !== sz) {
         el.dataset.sz = sz;
-        const cs = getComputedStyle(el),
-          v = cs.borderTopLeftRadius;
+        const v = cs.borderTopLeftRadius;
         el.dataset.rad = String(
           v.endsWith('%') ? (parseFloat(v) / 100) * Math.min(r.width, r.height) : parseFloat(v) || 0,
         );
       }
+      const tier = tierOf(el),
+        isPop =
+          tier === 2 ||
+          (el.getAttribute('role') === 'dialog' && !el.classList.contains('hud') && !p?.dataset.onlineScene)
+            ? 1
+            : 0;
+      if (tier === 2 && alpha > 0.1) popups.push({ el, r });
       this.rects[n].set(r.left * pr, (innerHeight - r.bottom) * pr, r.width * pr, r.height * pr);
-      this.radii[n] = +(el.dataset.rad || 0) * pr;
+      this.meta[n].set(+(el.dataset.rad || 0) * pr, alpha, isPop, 0);
       n++;
+    }
+    this.clearMasks();
+    if (popups.length > 0) {
+      const targets = document.querySelectorAll<HTMLElement>(
+        '[role="dialog"] > :not([role="listbox"]):not([role="menu"]), [data-test="space-settings"], [data-test="space-detail"], [data-test="space-lyrics"], [data-test="space-queue"], #sign, #focus, .hud.player, [data-test="space-playlist-source"]',
+      );
+      for (const t of targets) {
+        if (t.hidden || t.closest('[hidden]')) continue;
+        const tr = t.getBoundingClientRect();
+        if (tr.width < 2 || tr.height < 2) continue;
+        const hits = popups.filter(
+          ({ el, r }) =>
+            el !== t &&
+            !el.contains(t) &&
+            !t.contains(el) &&
+            r.left < tr.right &&
+            r.right > tr.left &&
+            r.top < tr.bottom &&
+            r.bottom > tr.top,
+        );
+        if (!hits.length) continue;
+        const imgs = ['linear-gradient(#000 0 0)'],
+          sizes = ['100% 100%'],
+          pos = ['0 0'],
+          comp = ['exclude'],
+          wComp = ['xor'];
+        for (const { r } of hits) {
+          const mx = Math.floor(r.left - tr.left) + 2,
+            my = Math.floor(r.top - tr.top) + 2,
+            mw = Math.max(0, Math.ceil(r.width) - 4),
+            mh = Math.max(0, Math.ceil(r.height) - 4);
+          imgs.push('linear-gradient(#000 0 0)');
+          sizes.push(`${mw}px ${mh}px`);
+          pos.push(`${mx}px ${my}px`);
+          comp.push('exclude');
+          wComp.push('xor');
+        }
+        t.style.maskImage = imgs.join(', ');
+        t.style.maskSize = sizes.join(', ');
+        t.style.maskPosition = pos.join(', ');
+        t.style.maskRepeat = 'no-repeat';
+        t.style.maskComposite = comp.join(', ');
+        t.style.setProperty('-webkit-mask-composite', wComp.join(', '));
+        this.masked.add(t);
+      }
+    }
+    if (animating) {
+      this.dirtyUntil = Math.max(this.dirtyUntil, now + 120);
+      this.onWake?.();
     }
     this.mat.uniforms.n.value = n;
     this.mat.uniforms.block.value = 22 * pr;

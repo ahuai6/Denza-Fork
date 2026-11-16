@@ -153,3 +153,13 @@
 - [工作流 43917867943](https://github.com/ahuai6/Denza-Fork/actions/runs/43917867943) 对 `custom` 合并提交 `aa77a6aa27f3d20b635dce3234fba4d0f086ec4e` 全部通过（耗时 13m56s）：43 个文件、447 项全量单元测试、类型检查、应用构建、模型资源拉取、`cadenza-audio.exe` 原生音频引擎、安装版（`Cadenza-Setup-3.2.9-denza.7.exe` `455.95 MB`）/便携版（`Cadenza-3.2.9-denza.7-portable.exe` `425.10 MB`，`resources/app.asar` `175.18 MB`、`app.asar.unpacked` `430.46 MB`）打包及 `scripts/packaged-smoke.cjs`（`Packaged modules and text runtime passed (9 models; no account sign-in)`）检查。
 - [构建产物 14254301476](https://github.com/ahuai6/Denza-Fork/actions/runs/43917867943/artifacts/14254301476) 包含安装版、便携版与 `SHA256SUMS.txt`。构建完成后仅补充验证与交接文档（`docs/**`），不修改应用运行代码；发布工作流再次校验提交已合并、运行/构建输入一致及资产 SHA256。
 - 完整经典/空间图形回归未在本次自动化构建中执行，以及真实在线账号、实体显示卡与 Windows 实机音频未实测的限制继续保留。
+
+## 3.2.9-denza.8 空间马赛克叠层与色调映射复查修复
+
+- 复查 `3.2.9-denza.7` 改动时发现并修复四项空间细节问题：
+  1. 此前给 `DropList` / `MenuList` 标记 `data-glass-skip` 并使用 `blur(22px)` 深色实底遮盖，导致展开的下拉框和右键菜单未应用 WebGL `GlassPass` 马赛克背景特效；且 `GlassPass` 着色器原 `if (k > inside)`（`1.0 > 1.0` 为假）导致子卡片叠加在父卡片上时无法建立自身马赛克网格、父卡片白边穿过子卡片。现移除 `data-glass-skip`、为 `.addTo` 补齐 `.card`、按层级排序并在着色器中采用 `ring *= 1. - k` 与前景优先覆盖，同时对与浮出下拉框/菜单重叠的底层容器使用 `mask-composite: exclude`（`-webkit-mask-composite: xor`）局部镂空底层 DOM 文字。
+  2. 修复 `GlassPass` 中 `min(m, vec3(0.68))` 在明亮墙面前将 RGB 三通道同时截平导致 `SpaceSettings` 右侧与底栏马赛克网格消失为纯灰底的问题，改为平滑肩部压缩 `m / (1 + m * k)`，保留相邻马赛克块明暗和冷暖对比。
+  3. `GlassPass` 采集卡片实时 `opacity`（含父级 `.overlay`）并联动 `wakeScene`，使面板进入与 `data-closing` 退场期间 WebGL 马赛克及白边与 DOM 同步渐隐渐显。
+  4. 进一步提升空间直射阳光、环境阴影与光束增益对比度，并在 `OnlineDialog` 退场期补充 `inert` 与 `aria-hidden`。
+- 使用真实 Electron 重新截取并核验 `s1-space-home.png`、`s2-space-online-dd.png`（在线音乐平台下拉框）与 `s3-space-settings-dd.png`（空间设置滚动并展开字体下拉框）：确认下拉框内部与设置面板亮部均呈现清晰 WebGL 马赛克方块与单层白边，底层输入框与设置文字在下拉框区域内完全镂空不互串，无父层白线横穿下拉框。
+- 全量 43 个文件 / 447 项单元测试、类型检查、`online:deps:check`、`build:app` 与 `vite build --mode web` 重新通过；未覆盖边界同上。

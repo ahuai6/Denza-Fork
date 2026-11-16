@@ -453,7 +453,6 @@ function DropList({
         (pict ? ' on-picture' : '')
       }
       role="listbox"
-      data-glass-skip={space ? '' : undefined}
       data-closing={closing || undefined}
       style={pos}
     >
@@ -777,7 +776,6 @@ function MenuList({
       ref={ref}
       role="menu"
       data-menu
-      data-glass-skip={inSpace ? '' : undefined}
       data-closing={closing || undefined}
       style={pos || { left: at.x, top: at.y, visibility: 'hidden' }}
       onPointerEnter={onEnter}

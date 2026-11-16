@@ -73,13 +73,16 @@ export function OnlineDialog({
     };
     addEventListener('keydown', key, true);
     return () => removeEventListener('keydown', key, true);
-  }, [active]);
+  }, [open, active]);
   if (!shown || (open && !active)) return null;
+  const isClosing = !open || closing;
   return createPortal(
     <div
       className={s.overlay + ' ' + surface.className + (!surface.space && picture ? ' on-picture' : '')}
       data-online-scene={surface.space ? 'space' : 'classic'}
-      data-closing={!open || closing || undefined}
+      data-closing={isClosing || undefined}
+      aria-hidden={isClosing || undefined}
+      inert={isClosing}
       onKeyDown={(e) => {
         if (e.key !== 'F11') e.stopPropagation();
       }}
