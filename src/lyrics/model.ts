@@ -317,11 +317,9 @@ export function buildLyrics(p: Parsed, map: BeatGrid, end: number): LyricDoc {
       // (timed: its last unit's own end where the lyrics give one, else a quarter second after it starts)
       if (W.timed) {
         const ru = R.words[k].units!,
-          lu = ru[ru.length - 1];
-        W.end =
-          lu.e != null
-            ? Math.max(lu.e, Math.max(...W.units.map((u) => u.t!)) + 0.08)
-            : Math.max(...W.units.map((u) => u.t!)) + 0.25;
+          lu = ru[ru.length - 1],
+          rawMaxT = Math.max(...ru.map((u) => Math.max(u.t, L.t)));
+        W.end = lu.e != null ? Math.max(lu.e, rawMaxT + 0.08) : rawMaxT + 0.25;
         if (lu.e != null) W.endGiven = true;
       } else W.end = Math.min(nx, W.t + syllableTime(syllables(W.text), bpm) + 0.35, L.end);
       W.end = Math.max(W.end, W.t + 0.12);
