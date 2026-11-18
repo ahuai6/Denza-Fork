@@ -125,8 +125,23 @@ class Platforms {
   async lyrics(track, signal) {
     const found = await this.provider(track.platform).lyrics(track, signal);
     if (!found?.original?.trim() && !found?.ttml?.trim()) throw Error('No lyrics available');
-    const { downloadLyricFormats } = require('./generated/lyrics.cjs');
-    return { ...found, ...downloadLyricFormats(found.ttml || found.original, found.translation, found.pronunciation) };
+    const { downloadLyricFormats, cleanBlankLyricRows } = require('./generated/lyrics.cjs');
+    const cleaned = {
+      ...found,
+      ...(typeof found.original === 'string' && !/<tt[\s>]/i.test(found.original)
+        ? { original: cleanBlankLyricRows(found.original) }
+        : {}),
+      ...(typeof found.translation === 'string' && found.translation
+        ? { translation: cleanBlankLyricRows(found.translation) }
+        : {}),
+      ...(typeof found.pronunciation === 'string' && found.pronunciation
+        ? { pronunciation: cleanBlankLyricRows(found.pronunciation) }
+        : {}),
+    };
+    return {
+      ...cleaned,
+      ...downloadLyricFormats(cleaned.ttml || cleaned.original, cleaned.translation, cleaned.pronunciation),
+    };
   }
   async open(song, playlist) {
     const provider = this.provider(song?.platform || playlist?.platform);

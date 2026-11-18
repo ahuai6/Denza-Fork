@@ -96,11 +96,19 @@ function regroup(words: RawWord[], want: string[]): RawWord[] {
     // split, so a wanted break inside one is not taken (the words either side of it stay one)
     if (timed)
       for (const u of w.units!) {
-        const c = spacingKey(u.c);
         if (!cur || starts.has(pos)) open();
-        cur!.units!.push({ ...u, sp: false });
-        put(c);
-        pos += c.length;
+        let uc = '';
+        for (const ch of u.c) {
+          if (/\s/.test(ch)) {
+            if (cur!.text) spaceBefore = true;
+            if (uc && !uc.endsWith(' ')) uc += ' ';
+          } else {
+            put(ch);
+            uc += ch;
+            pos++;
+          }
+        }
+        cur!.units!.push({ ...u, c: uc.trim(), sp: false });
       }
     else
       for (const ch of spacingKey(w.text)) {

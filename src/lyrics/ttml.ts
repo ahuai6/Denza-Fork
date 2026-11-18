@@ -95,7 +95,7 @@ export function ttmlTime(v: string | undefined): number | null {
 }
 /** Text that stands in for a translation not written yet. */
 const PLACEHOLDER =
-  /^\s*(待翻[译譯]|翻[译譯]待[补補]|暂无翻[译譯]|暫無翻譯|无翻[译譯]|無翻譯|translation pending|tbd|n\/a|-+|…+|\.\.\.)\s*$/i;
+  /^\s*(\/\/|待翻[译譯]|翻[译譯]待[补補]|暂无翻[译譯]|暫無翻譯|无翻[译譯]|無翻譯|translation pending|tbd|n\/a|-+|…+|\.\.\.)\s*$/i;
 /** Is this TTML (rather than LRC or plain text)? */
 export const isTtml = (src: string) => /^\s*(?:﻿)?\s*(?:<\?xml[^>]*>\s*)?(?:<!--[\s\S]*?-->\s*)*<tt[\s>]/i.test(src);
 
@@ -225,7 +225,19 @@ function lineOf(p: El, b: number, e: number | null): RawLine | null {
       raw = textOf(s);
     if (t == null) return;
     const c = raw.replace(/[()（）]/g, '').trim();
-    if (!c) return;
+    if (!c) {
+      if (/\s/.test(raw) && into === 'main') {
+        if (cur && cur.units!.length) {
+          cur.gap = true;
+          flush();
+        } else if (words.length) {
+          words[words.length - 1].gap = true;
+        } else {
+          gap = true;
+        }
+      }
+      return;
+    }
     const u: RawUnit = { t, c, sp: /\s$/.test(raw), ...(en != null && en > t ? { e: en } : {}) };
     if (into === 'bg') {
       const host = cur && cur.units!.length ? cur : words[words.length - 1];

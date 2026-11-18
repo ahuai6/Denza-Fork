@@ -60,4 +60,4 @@ export function downloadLyricFormats(original: string, translation = '', pronunc
   const base = ttml ? ttmlToLrc(ttml) : original;
   return { lrc: cleanBlankLyricRows(interleave(base, translation, pronunciation)), ttml, converted: false };
 }
-export { translationLines } from './translation';
+export { translationLines, cleanBlankLyricRows } from './translation';

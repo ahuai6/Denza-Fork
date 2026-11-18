@@ -255,10 +255,15 @@ function parseKar(body: string, shift: number): { words: RawWord[]; close: numbe
       const u = { t: tt, c: txt, sp },
         lead = /^\s/.test(c); // (a space before the unit breaks just as one after the one before)
       if (before > 0 || opened) {
-        const host = cur && cur.units?.length ? cur : words[words.length - 1] || (cur ||= { text: '', units: [] }),
+        const host: RawWord =
+            cur && cur.units?.length ? cur : words[words.length - 1] || (cur ||= { text: '', units: [] }),
           hu = (host.harm ||= { text: '', units: [] }).units!;
         if (lead && hu.length) hu[hu.length - 1].sp = true;
         hu.push(u);
+        if (depth === 0 && sp && host.units?.length) {
+          host.gap = true;
+          if (host === cur) flush();
+        }
         inHarm = true;
         lastHarm = u;
       } else {
@@ -289,7 +294,12 @@ function parseKar(body: string, shift: number): { words: RawWord[]; close: numbe
       // (after a harmony: where the harmony stops — the line's own voice ended before it, and is not held for it)
       if (inHarm) {
         if (lastHarm && tt > lastHarm.t) lastHarm.e = tt;
-        if (cur && /\s/.test(c)) flush();
+        if (/\s/.test(c)) {
+          if (cur && cur.units?.length) {
+            cur.gap = true;
+            flush();
+          } else if (words.length) words[words.length - 1].gap = true;
+        }
         continue;
       }
       const prev = cur && cur.units?.length ? cur.units : words[words.length - 1]?.units;
@@ -297,7 +307,12 @@ function parseKar(body: string, shift: number): { words: RawWord[]; close: numbe
         const u = prev[prev.length - 1];
         if (tt > u.t) u.e = tt;
       }
-      if (cur && /\s/.test(c)) flush();
+      if (/\s/.test(c)) {
+        if (cur && cur.units?.length) {
+          cur.gap = true;
+          flush();
+        } else if (words.length) words[words.length - 1].gap = true;
+      }
       close = tt;
     }
   }
@@ -345,7 +360,7 @@ export function parse(src: string, off = 0, len = Infinity): Parsed {
         .replace(/[()（）]/g, '')
         .trim();
     if (e) {
-      if (plain)
+      if (plain && plain !== '//')
         e.subs.push(
           stripped
             .replace(/#[1-3]?/g, '')
@@ -355,7 +370,7 @@ export function parse(src: string, off = 0, len = Infinity): Parsed {
       return;
     }
     // a stamp with only a chorus mark: the chorus comes in here (and the line before it ends, as with an empty stamp)
-    if (!plain) {
+    if (!plain || plain === '//') {
       const mk = stripped.trim().match(MARK);
       if (mk) marks.push({ t: tt, level: mk[1] ? +mk[1] : 2 });
       breaks.push(tt);
@@ -405,8 +420,14 @@ export function parse(src: string, off = 0, len = Infinity): Parsed {
       L.t -= d;
       if (L.close != null) L.close -= d;
       for (const w of L.words) {
-        for (const u of w.units || []) u.t -= d;
-        for (const u of w.harm?.units || []) u.t -= d;
+        for (const u of w.units || []) {
+          u.t -= d;
+          if (u.e != null) u.e -= d;
+        }
+        for (const u of w.harm?.units || []) {
+          u.t -= d;
+          if (u.e != null) u.e -= d;
+        }
       }
     }
     for (let i = 0; i < breaks.length; i++) breaks[i] -= d;

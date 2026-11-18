@@ -34,7 +34,7 @@ import { MvLook } from './Settings';
 import { setSettings } from '../actions/settings';
 import s from './Effect.module.css';
 import { PerfHud } from './PerfHud';
-import { isTtml, ttmlToLrc } from '../../engine';
+import { cleanBlankLyricRows, isTtml, ttmlToLrc } from '../../engine';
 import { DialogOwner } from '../ui/DialogOwner';
 
 const OnlineLyricsSearch = lazy(() =>
@@ -425,18 +425,19 @@ export function LyricsTab() {
     t = trackOf(p.shownId),
     session = p.session!,
     target = useStore(settings, (x) => x.lyricsTarget) === 'lrc' ? 'lrc' : 'tag';
-  const [text, setText] = useState(() => (p.hasLyrics ? session.spec.lyrics : '') || ''),
+  const toEditableLrc = (x: string) => cleanBlankLyricRows(isTtml(x) ? ttmlToLrc(x) : x);
+  const [text, setText] = useState(() => toEditableLrc((p.hasLyrics ? session.spec.lyrics : '') || '')),
     [msg, setMsg] = useState('');
   const ta = useRef<HTMLTextAreaElement>(null);
   useEffect(() => setTranslating(false), [p.shownId]);
   // (TTML lyrics are edited as LRC: saved, the song reads its LRC from then on)
   useEffect(() => {
     const x = (player.get().hasLyrics ? player.get().session?.spec.lyrics : '') || '';
-    setText(isTtml(x) ? ttmlToLrc(x) : x);
+    setText(toEditableLrc(x));
   }, [p.shownId]);
   const use = async (src: string) => {
     const ok = await useLyrics(src);
-    setText(isTtml(src) ? ttmlToLrc(src) : src);
+    setText(toEditableLrc(src));
     setMsg(tx(ok ? 's.lyr.saved' : 'load.none'));
   };
   const end = session.musicEnd;

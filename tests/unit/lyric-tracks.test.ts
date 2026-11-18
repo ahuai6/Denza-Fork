@@ -141,7 +141,7 @@ describe('matching draft preserves auxiliary tracks', () => {
   it('cleans timestamp-only and whitespace rows while preserving metadata and cue rows', () => {
     expect(
       cleanBlankLyricRows(
-        '[ti:Fixture]\r\n \r\n[01:07.00]  \r\n[01:08]<01:09>\r\n[01:10]#2\r\n[01:11]@1\r\n[01:12]字\r\n',
+        '[ti:Fixture]\r\n \r\n[01:07.00]  \r\n[01:08]<01:09>\r\n[01:09]//\r\n[01:09.50]<01:09.50>//<01:10.00>\r\n[01:10]#2\r\n[01:11]@1\r\n[01:12]字\r\n',
       ),
     ).toBe('[ti:Fixture]\r\n[01:10]#2\r\n[01:11]@1\r\n[01:12]字');
   });

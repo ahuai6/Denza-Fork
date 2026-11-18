@@ -44,6 +44,13 @@ export { parseLyrics, CUE_SYMBOLS } from '../lyrics/parse';
 export { isTtml, ttmlToLrc } from '../lyrics/ttml';
 export { subLines, splitBrackets } from '../lyrics/subs';
 export {
+  buildNpLinePlans,
+  type NpLinePlan,
+  type NpWordPlan,
+  type NpUnitPlan,
+  type NpHarmPlan,
+} from '../lyrics/np-plan';
+export {
   translationLines,
   cleanBlankLyricRows,
   translationLrc,

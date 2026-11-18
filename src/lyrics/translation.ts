@@ -23,7 +23,7 @@ const key = (t: number) => Math.round(t * 100);
 const id = (t: number) => 'line.' + key(t);
 const stamp = /\[(\d+):(\d+)(?:[.:](\d+))?\]/g;
 const seconds = (m: string, s: string, fraction?: string) => +m * 60 + +s + +(fraction ? '0.' + fraction : 0);
-export const translationLrc = (source: string) => (isTtml(source) ? ttmlToLrc(source) : source);
+export const translationLrc = (source: string) => cleanBlankLyricRows(isTtml(source) ? ttmlToLrc(source) : source);
 export function translationLines(source: string): TranslationLine[] {
   return parseLyrics(source).lines.map((line) => ({
     id: id(line.t),
@@ -56,9 +56,12 @@ function editableSubtitle(line: ReturnType<typeof parseLyrics>['lines'][number],
 export function cleanBlankLyricRows(source: string): string {
   return source
     .split(/\r?\n/)
-    .filter(
-      (row) => row.replace(/\[\d+:\d+(?:[.:]\d+)?\]|<\d+:\d+(?:[.:]\d+)?>/g, '').replace(/[\s\u200b]/g, '').length,
-    )
+    .filter((row) => {
+      const stripped = row
+        .replace(/\[\d+:\d+(?:[.:]\d+)?\]|<\d+:\d+(?:[.:]\d+)?>/g, '')
+        .replace(/[\s\u200b-\u200f\u2060\ufeff]/g, '');
+      return stripped.length > 0 && stripped !== '//';
+    })
     .join(source.includes('\r\n') ? '\r\n' : '\n');
 }
 /** Replace only the identified translation, preserving all other auxiliary rows and original word/cue timing. */

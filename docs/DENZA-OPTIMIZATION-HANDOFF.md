@@ -145,3 +145,19 @@
 ### 后续接手与上游合并注意点
 
 - **未覆盖范围**：本地未安装 `playwright` 与 `cargo`，原版完整图形端到端测试、Windows 实体音频与真机 GPU 表现、真实账号与线上服务可用性未在本机执行；若后续同步 Cadenza 上游，请注意合并冲突集中点：`base.css` `[role='dialog']:focus-visible`、`Shell.tsx` 非懒加载 `PosterWall`/`SettingsView`、`space/passes.ts`、`space/world.ts` 帧节流与光影参数、`space/plan.ts` 侧房门口判断、`space/systems/audio.ts` 声场矩阵、`engine.ts`/`backdrops.ts`/`ambient.ts`/`cover.ts` 缓存策略。
+
+---
+
+## 本轮接手交接：3.2.9-denza.9（播放页逐字歌词闪烁修复 / TTML-LRC 结束时间与切句与多字同时间戳优化 / 空格保留 / 下载自动清理空行）
+
+- **基线与改动范围**：基于 `custom`（`6814970`，`3.2.9-denza.8`），围绕播放页逐字歌词渲染与在线歌词清洗链路完成改造。
+- **涉及文件与关键符号改动**：
+  - `src/app/ui/NpLyrics.module.css`：移除 `.line` 的群组 `opacity: var(--o)` 与 `.line .w` 的 `--un: calc(var(--bu) / var(--o))` 除法，直接用 `rgba(255, 255, 255, var(--o))` / `rgba(255, 255, 255, var(--bu))` 绘制逐字渐变，根除 `data-on="true"` 激活瞬间未唱字闪白至 `1.0` 的问题；将 `.w` 的 `white-space: pre-wrap` 改为 `white-space: break-spaces` 防止 `inline-block` 尾随空格悬挂塌缩。
+  - `src/lyrics/np-plan.ts`（新增，经 `src/engine/index.ts` 导出供 `src/app/ui/NpLyrics.tsx` 使用）：实现 `buildNpLinePlans(lines, beatLen)`，统一计算播放页每行激活起点 `start`、实际唱完时间 `sungEnd`、词与字符级显示单元 `units`（保留 `w.disp` 内部空格与词间 `w.gap`，将单时间戳多字符与连续相同时间戳按字符权重顺序拆分为独立子区间，未闭合词平滑延音至下一词或句尾，切句起点 `start >= pHoldEnd` 不再提前截断上一句尾字动画）。
+  - `src/lyrics/model.ts`、`src/lyrics/parse.ts`、`src/lyrics/ttml.ts`、`src/lyrics/spacing.ts`：`Unit` 保留 `e?: number`、`Line` 保留 `close?: number`（不改动 2D 导演 `camera.ts` 依赖的 `W.end` 启发值）；`parse.ts` 修复空时间戳带空格 `<mm:ss.xx> ` 与和声右括号后空格丢失 `gap = true` 及 `shiftAll` 未偏移 `u.e` 的问题，并忽略独立 `//` 占位空行；`ttml.ts` 修复纯空白计时 `<span>` 丢失 `gap = true` 并扩展 `PLACEHOLDER` 覆盖 `//`；`spacing.ts` `regroup` 保留单个计时单元内部的空格至 `w.disp` 与 `u.c`。
+  - `src/lyrics/translation.ts`、`src/lyrics/download.ts`、`electron/platforms.cjs`、`src/app/views/Effect.tsx`、`src/app/space/SpacePanels.tsx`：`cleanBlankLyricRows` 扩展清理零宽字符与 `//` 占位空行，`platforms.lyrics`、`downloadLyricFormats`、`translationLrc` 与双界面歌词编辑框统一自动剥离空白行。
+- **实测对比数据（真实 Electron 渲染探测 + 43 文件 / 450 项单元测试）**：
+  - 唱到前一刻（`t = 3.10s`，`L1.t = 3.20s`）：修改前 `.line[data-on='true']` 使整行未唱字闪至 `alpha = 1.0`；修改后未唱字 `--p = 0.000`，渐变为 `rgba(255, 255, 255, 0.325)`（`--bu` 从 `0.31` 平滑过渡至 `0.42`）。
+  - 切句前夕（`t = 2.90s`，上一句 `2.95s` 结束，下一句 `3.20s` 开始）：修改前 `starts[1]` 在 `lastW.end <= L.t` 时回退 `L.t - 0.15` 导致紧邻句提前切句并强行置 `--p = 1`；修改后 `t = 2.90s` 时上一句保持 `data-on="true"`、尾字 `--p = 0.947` 自然推进至 `2.95s`。
+  - 单时间戳多字符与同时间戳（`<00:03.20>我们的<00:04.40>故<00:04.40>事<00:05.20>`）：5 个字符在 `3.40s..5.00s` 依次推进 `[0.5,0,0,0,0] -> [1,0.5,0,0,0] -> [1,1,0.5,0,0] -> [1,1,1,0.5,0] -> [1,1,1,1,0.5]`。
+  - 空格宽度（`"清晨 的 光"`）：DOM 完整输出 `"清晨 的 光"`，带尾随空格的 `'晨 '` 实测宽度 `40.5px`（无空格单字 `'清'` 为 `34.3px`）。

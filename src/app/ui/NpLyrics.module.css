@@ -42,7 +42,7 @@
   --o: calc(0.36 - min(var(--d, 1), 4) * 0.05);
   --bu: calc(0.36 - min(var(--d, 1), 4) * 0.05);
   --onk: 0;
-  opacity: var(--o);
+  opacity: 1;
   filter: blur(calc(min(var(--d, 1), 5) * 0.55px));
   transition:
     filter var(--t-slow) var(--ease),
@@ -76,19 +76,18 @@
 }
 .w {
   display: inline-block;
-  white-space: pre-wrap;
+  white-space: break-spaces;
 }
 .wu {
   display: inline;
 } /* a word of characters, each its own .w: it wraps between them */
-/* every line is drawn the same way — the sung part white, the rest at --un (its light against the line's) — so that becoming the sung line, or leaving
-   it, only eases its brightness: switching between two ways of drawing its words made the line flash as it changed */
+/* every line is drawn the same way — the sung part at --o, the unsung part at --bu — so that becoming the sung line, or leaving
+   it, only eases its brightness monotonically without a group-opacity division spike */
 .line .w {
-  --un: min(1, calc(var(--bu) / max(0.01, var(--o))));
   background: linear-gradient(
     90deg,
-    #fff calc(var(--p, 0) * (100% + 0.6em) - 0.6em),
-    rgba(255, 255, 255, var(--un)) calc(var(--p, 0) * (100% + 0.6em))
+    rgba(255, 255, 255, var(--o)) calc(var(--p, 0) * (100% + 0.6em) - 0.6em),
+    rgba(255, 255, 255, var(--bu)) calc(var(--p, 0) * (100% + 0.6em))
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -101,7 +100,7 @@
   background: none;
   -webkit-background-clip: border-box;
   background-clip: border-box;
-  color: rgba(255, 255, 255, calc(var(--un) + (1 - var(--un)) * var(--p, 0)));
+  color: rgba(255, 255, 255, calc(var(--bu) + (var(--o) - var(--bu)) * var(--p, 0)));
 }
 /* a line that was sung keeps its words where they lifted to, and lets them settle back softly */
 .line .w {
@@ -121,17 +120,17 @@
   display: block;
   font-size: 0.55em;
   font-weight: 560;
-  opacity: 0.75;
+  opacity: calc(var(--o) * 0.75);
   margin-top: 4px;
 }
 .line small[data-kind='read'] {
-  opacity: 0.45;
+  opacity: calc(var(--o) * 0.45);
   font-weight: 500;
 } /* a reading: softer than a translation */
 .line small[data-kind='harm'] {
   font-size: 0.47em;
   font-weight: 600;
-  opacity: 0.6;
+  opacity: calc(var(--o) * 0.6);
   margin-top: 2px;
 } /* a translation's bracketed part, as a harmony is */
 .compact .line {

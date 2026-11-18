@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { ui, useStore } from '../state';
 import { engine } from '../playback/stage';
-import { fontStack, subLines, type LyricLine as Line } from '../../engine';
+import { fontStack, subLines, buildNpLinePlans, type LyricLine as Line } from '../../engine';
 import s from './NpLyrics.module.css';
 
 /* ---------- lyrics ----------
@@ -27,8 +27,7 @@ function liftAt(dt: number, dur: number) {
     u = Math.min(1, dt / d);
   return strike + 0.68 * (u * u * (3 - 2 * u));
 }
-/** A word lit character by character: any word of several characters that is not Latin (it can wrap onto two rows). */
-const byUnit = (w: Line['words'][number]) => !w.latin && w.units.length > 1;
+export { buildNpLinePlans };
 interface LS {
   el: HTMLElement;
   y: number;
@@ -88,19 +87,12 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
     lvl: 0.5,
     lvlAt: 0,
   });
-  // when each line becomes the current one: as it starts — or, as Apple Music does, half a beat early when the line
-  // before is sung well before it (a breath of a beat or more): the page is already there when the voice comes in
-  const starts = useMemo(() => {
+  // when each line becomes the current one and how each word/character is timed across its singing
+  const plans = useMemo(() => {
     const map = engine.session?.map;
-    return lines.map((L, i) => {
-      const P = lines[i - 1],
-        bl = map ? map.beatLen(L.t) : 0.5;
-      // (a line that starts while the one before is still sounding, by the lyrics' own end, becomes current once that ends)
-      const lastW = P?.words.at(-1),
-        held = lastW && lastW.endGiven && lastW.end > L.t ? lastW.end : -Infinity;
-      return Math.max(held, P && L.t - Math.min(P.sung, P.end) >= bl ? L.t - bl / 2 : L.t - 0.15);
-    });
+    return buildNpLinePlans(lines, map ? (t) => map.beatLen(t) : undefined);
   }, [lines]);
+  const starts = useMemo(() => plans.map((p) => p.start), [plans]);
   const findLine = (t: number) => {
     let lo = 0,
       hi = lines.length - 1,
@@ -187,23 +179,75 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
   // words, their characters and its harmonies all inherit — none carries one of its own, so no row or character can
   // light at another moment than the rest; a line timed word by word has one on each of its drawn words or characters)
   const leaves = (el: HTMLElement) => el.querySelectorAll<HTMLElement>('[data-w]:not([data-u-w]), [data-u], [data-h]');
-  const mark = (idx: number) =>
+  const paintLine = (i: number, t = engine.time) => {
+    const L = lines[i],
+      plan = plans[i],
+      el = lineEls.current[i];
+    if (!L || !plan || !el) return;
+    const ws = el.querySelectorAll<HTMLElement>('[data-w]'),
+      lvl = st.current.lvl;
+    // a line timed only as a whole lights as a whole, at once, from the moment it is the current line (or its own time,
+    // if that is sooner), as Apple Music does: one fill on the line — never dark while current, never faded in
+    const t0w = Math.min(starts[i] ?? L.t, L.t);
+    if (!L.kar) {
+      const on = t >= t0w ? 1 : 0;
+      put(el, '--p', String(on));
+      put(el, '--gl', (0.6 * lvl * on).toFixed(3));
+    }
+    // each word: its fill (how far it is sung), its glow (only once it is all but sung) and its own lift as it is sung
+    plan.words.forEach((wp, k) => {
+      const e = ws[k];
+      if (!e) return;
+      const fill = (node: HTMLElement, t0: number, t1: number) => {
+        const q = Math.min(1, Math.max(0, (t - t0) / Math.max(0.08, t1 - t0))),
+          gl = Math.min(1, Math.max(0, (q - 0.6) / 0.4));
+        put(node, '--p', q.toFixed(3));
+        put(node, '--gl', (gl * gl * lvl).toFixed(3));
+        put(node, 'translate', `0 ${(-LIFT * liftAt(t - t0, t1 - t0)).toFixed(2)}px`);
+      };
+      // a word drawn character by character (one that may wrap onto the next row): each character fills in its own
+      // time, so a second row lights up only once it is sung
+      if (wp.byUnit && L.kar) {
+        const us = e.querySelectorAll<HTMLElement>('[data-u]');
+        wp.units.forEach((up, ui) => {
+          const uEl = us[ui];
+          if (uEl) fill(uEl, up.t0, up.t1);
+        });
+      } else if (!L.kar) put(e, 'translate', '');
+      else fill(e, wp.t0, wp.t1);
+    });
+    // the harmonies: each from its own first sound to its last (at least as long as the word it goes with)
+    const hs = el.querySelectorAll<HTMLElement>('[data-h]');
+    plan.harms.forEach((hp, k) => {
+      const e = hs[k];
+      if (!e) return;
+      if (!L.kar) {
+        put(e, 'translate', '');
+        return;
+      }
+      const q = Math.min(1, Math.max(0, (t - hp.t0) / Math.max(0.08, hp.t1 - hp.t0)));
+      put(e, '--p', q.toFixed(3));
+      put(e, 'translate', `0 ${(-LIFT * 0.6 * liftAt(t - hp.t0, hp.t1 - hp.t0)).toFixed(2)}px`);
+    });
+  };
+  const mark = (idx: number, t = engine.time) => {
     lineEls.current.forEach((el, i) => {
       if (!el) return;
       const d = i - idx,
         whole = !lines[i]?.kar;
-      // a line left before its last word had lifted all the way: its words go the rest of the way up (softly, by the
-      // transition) and stay there, never held half-way — and it stays lit, as sung
-      if (d !== 0 && el.dataset.on === 'true') {
+      // a line left in the wake above the current one: finish its words so none stays half-filled or half-lifted
+      if (d < 0 && el.dataset.on === 'true') {
         leaves(el).forEach((w) => {
           if (w.style.translate && !whole) put(w, 'translate', `0 ${w.dataset.h != null ? -LIFT * 0.6 : -LIFT}px`);
           if (!whole) put(w, '--p', '1');
+          put(w, '--gl', '0');
         });
         if (whole) put(el, '--p', '1');
+        put(el, '--gl', '0');
       }
       // a line still to come holds nothing from an earlier pass (a seek back, or the line of another song that had this
       // place): its words wait at rest, unlit — never lifted, to drop the moment its voice comes in
-      if (d > 0 && el.dataset.sung === 'true') {
+      if (d > 0 && (el.dataset.sung === 'true' || el.dataset.on === 'true')) {
         leaves(el).forEach((w) => {
           put(w, 'translate', '');
           put(w, '--p', '0');
@@ -231,6 +275,8 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
       el.style.setProperty('--d', String(Math.min(5, Math.abs(d))));
       el.dataset.on = String(d === 0);
     });
+    if (idx >= 0) paintLine(idx, t);
+  };
   const measure = () => {
     const S = st.current;
     lineEls.current.forEach((el) => {
@@ -285,7 +331,7 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
       const i = findLine(p.t);
       if (i !== S.cur) {
         S.cur = i;
-        mark(i);
+        mark(i, p.t);
         aim(i, !S.manual, false);
       }
       // a long wait (the intro, a break): three dots come in above the line to come as a line of their own (it keeps its own
@@ -295,7 +341,7 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
       {
         const N = lines[i + 1],
           // (from when the singing is over — not when the line stops being current, a few bars later)
-          sungEnd = i < 0 ? 0 : lines[i].sung,
+          sungEnd = i < 0 ? 0 : (plans[i]?.sungEnd ?? lines[i].sung),
           from = i < 0 ? 0 : sungEnd + WAIT_AFTER,
           to = N ? starts[i + 1] : 0,
           w = N && to - sungEnd >= WAIT_MIN && to - from >= 2 && p.t >= from && p.t < to ? i + 1 : -1;
@@ -323,71 +369,8 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
         S.lvl += ((p.rs ? p.rs.level : 0.5) - S.lvl) * k;
       }
       // (the current line — and a line already begun under it, still waiting to be current: its words are sung meanwhile)
-      paint(i);
-      if (lines[i + 1] && p.t >= lines[i + 1].t) paint(i + 1);
-      function paint(i: number) {
-        const L = lines[i],
-          el = lineEls.current[i];
-        if (!L || !el) return;
-        const ws = el.querySelectorAll<HTMLElement>('[data-w]'),
-          lvl = S.lvl;
-        // a line timed only as a whole lights as a whole, at once, from the moment it is the current line (or its own time,
-        // if that is sooner), as Apple Music does: one fill on the line — never dark while current, never faded in
-        const t0w = Math.min(starts[i] ?? L.t, L.t);
-        if (!L.kar) {
-          const on = p.t >= t0w ? 1 : 0;
-          put(el, '--p', String(on));
-          put(el, '--gl', (0.6 * lvl * on).toFixed(3));
-        }
-        // each word: its fill (how far it is sung), its glow (only once it is all but sung) and its own lift as it is sung
-        L.words.forEach((w, k) => {
-          const e = ws[k];
-          if (!e) return;
-          // (a word is all sung by the time the next one starts: with no gap, or a tiny one, it does not trail on under it)
-          const nx = L.words[k + 1],
-            end = nx && nx.t > w.t ? Math.min(w.end, nx.t) : w.end;
-          const fill = (el: HTMLElement, t0: number, t1: number) => {
-            const q = Math.min(1, Math.max(0, (p.t - t0) / Math.max(0.08, t1 - t0))),
-              gl = Math.min(1, Math.max(0, (q - 0.6) / 0.4));
-            put(el, '--p', q.toFixed(3));
-            put(el, '--gl', (gl * gl * lvl).toFixed(3));
-            put(el, 'translate', `0 ${(-LIFT * liftAt(p.t - t0, t1 - t0)).toFixed(2)}px`);
-          };
-          // a word drawn character by character (one that may wrap onto the next row): each character fills in its own
-          // time, so a second row lights up only once it is sung
-          if (byUnit(w) && L.kar) {
-            const us = e.querySelectorAll<HTMLElement>('[data-u]'),
-              n = w.units.length,
-              span = Math.max(0.08, w.end - w.t);
-            const at = (i: number) => w.units[i]?.t ?? w.t + (span * 0.85 * i) / n;
-            us.forEach((u, i) => fill(u, at(i), i + 1 < n ? at(i + 1) : end));
-          }
-          // (a line timed only as a whole: lit on the line itself, above — its words do not lift one by one: that is a
-          // word being sung, which a line timed as a whole has none of)
-          else if (!L.kar) put(e, 'translate', '');
-          else fill(e, w.t, end);
-        });
-        // the harmonies: each from its own first sound to its last (at least as long as the word it goes with)
-        const hs = el.querySelectorAll<HTMLElement>('[data-h]');
-        L.words
-          .filter((w) => w.harm)
-          .forEach((w, k) => {
-            const e = hs[k],
-              H = w.harm!;
-            if (!e) return;
-            // (a line timed only as a whole: its harmonies light with it, at once, as its words do)
-            if (!L.kar) {
-              put(e, 'translate', '');
-              return;
-            }
-            const t0 = isFinite(H.t) ? H.t : w.t,
-              last = H.units[H.units.length - 1]?.t ?? t0;
-            const t1 = Math.max(t0 + 0.3, last + 0.25, w.end),
-              q = Math.min(1, Math.max(0, (p.t - t0) / Math.max(0.08, t1 - t0)));
-            put(e, '--p', q.toFixed(3));
-            put(e, 'translate', `0 ${(-LIFT * 0.6 * liftAt(p.t - t0, t1 - t0)).toFixed(2)}px`);
-          });
-      }
+      paintLine(i, p.t);
+      if (lines[i + 1] && p.t >= lines[i + 1].t) paintLine(i + 1, p.t);
     });
   }, [lines, live]);
   const wheel = (e: React.WheelEvent) => {
@@ -433,29 +416,22 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
             if (!engine.isPlaying) engine.play();
           }}
         >
-          {L.words.length ? (
-            L.words.map((w, k) => (
+          {plans[i]?.words.length ? (
+            plans[i].words.map((wp, k) => (
               <Fragment key={k}>
-                {byUnit(w) ? (
+                {wp.byUnit ? (
                   <span data-w data-u-w className={s.wu}>
-                    {w.units.map((u, i) => (
-                      <span key={i} data-u className={s.w}>
+                    {wp.units.map((u, ui) => (
+                      <span key={ui} data-u className={s.w}>
                         {u.c}
-                        {
-                          /* (the lyrics' own space after the word rides on its last character) */ i ===
-                            w.units.length - 1 &&
-                          k < L.words.length - 1 &&
-                          w.gap
-                            ? ' '
-                            : ''
-                        }
+                        {u.spaceAfter ? ' ' : ''}
                       </span>
                     ))}
                   </span>
                 ) : (
                   <span data-w className={s.w}>
-                    {w.disp ?? w.text}
-                    {k < L.words.length - 1 && (w.gap ?? (w.latin && L.words[k + 1].latin)) ? ' ' : ''}
+                    {wp.text}
+                    {wp.spaceAfter ? ' ' : ''}
                   </span>
                 )}
               </Fragment>

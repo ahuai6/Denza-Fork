@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { parse, parseRange } from '../../src/lyrics/parse';
+import { readFileSync } from 'node:fs';
+import { parse, parseLyrics, parseRange } from '../../src/lyrics/parse';
 import { buildLyrics, FUSE } from '../../src/lyrics/model';
+import { buildNpLinePlans } from '../../src/lyrics/np-plan';
+import { respace } from '../../src/lyrics/spacing';
 import { RhythmMap } from '../../src/rhythm/map';
 
 const map = RhythmMap.grid(120, 0, 120);
@@ -138,5 +141,103 @@ describe('harmonies hold nothing', () => {
     const doc = buildLyrics(parse('[00:01.00]hold on to me (oh yeah)\n[00:06.00]next'), RhythmMap.grid(120, 0, 40), 30);
     const W = doc.lines[0].words.find((w) => w.harm)!;
     expect(W.harm!.t).toBe(doc.lines[0].t);
+  });
+});
+
+describe('Now Playing word-timed schedule, multi-char timestamps and space preservation', () => {
+  const map = RhythmMap.grid(120, 0, 60);
+
+  it('subdivides multi-character single timestamps and shared timestamps sequentially instead of lighting all at once', () => {
+    // 1) LRC single timestamp covering multiple CJK characters + duplicate timestamps on consecutive characters
+    const doc = buildLyrics(
+      parse('[00:01.00]<00:01.00>我们的<00:02.20>故<00:02.20>事<00:03.00>\n[00:05.00]next'),
+      map,
+      30,
+    );
+    const plan = buildNpLinePlans(doc.lines, (t) => map.beatLen(t))[0];
+    const units = plan.words.flatMap((w) => w.units);
+    expect(units.map((u) => u.c)).toEqual(['我', '们', '的', '故', '事']);
+    expect(units[0].t0).toBeCloseTo(1.0, 2);
+    expect(units[0].t1).toBeCloseTo(1.4, 2);
+    expect(units[1].t0).toBeCloseTo(1.4, 2);
+    expect(units[1].t1).toBeCloseTo(1.8, 2);
+    expect(units[2].t0).toBeCloseTo(1.8, 2);
+    expect(units[2].t1).toBeCloseTo(2.2, 2);
+    expect(units[3].t0).toBeCloseTo(2.2, 2);
+    expect(units[3].t1).toBeCloseTo(2.6, 2);
+    expect(units[4].t0).toBeCloseTo(2.6, 2);
+    expect(units[4].t1).toBeCloseTo(3.0, 2);
+
+    // 2) TTML span covering multiple CJK characters (<span begin="00:02.00" end="00:02.50">清晨</span>)
+    const ttml = `<tt xmlns="http://www.w3.org/ns/ttml"><body><div>
+      <p begin="00:02.00" end="00:04.20"><span begin="00:02.00" end="00:02.50">清晨</span> <span begin="00:02.50" end="00:03.10">的</span> <span begin="00:03.10" end="00:04.20">光</span></p>
+    </div></body></tt>`;
+    const ttmlDoc = buildLyrics(parseLyrics(ttml), map, 30);
+    const ttmlPlan = buildNpLinePlans(ttmlDoc.lines, (t) => map.beatLen(t))[0];
+    const ttmlUnits = ttmlPlan.words.flatMap((w) => w.units);
+    expect(ttmlUnits.map((u) => u.c)).toEqual(['清', '晨', '的', '光']);
+    expect(ttmlUnits[0].t0).toBeCloseTo(2.0, 2);
+    expect(ttmlUnits[0].t1).toBeCloseTo(2.25, 2);
+    expect(ttmlUnits[1].t0).toBeCloseTo(2.25, 2);
+    expect(ttmlUnits[1].t1).toBeCloseTo(2.5, 2);
+    expect(ttmlUnits[2].t0).toBeCloseTo(2.5, 2);
+    expect(ttmlUnits[2].t1).toBeCloseTo(3.1, 2);
+    expect(ttmlUnits[3].t0).toBeCloseTo(3.1, 2);
+    expect(ttmlUnits[3].t1).toBeCloseTo(4.2, 2);
+  });
+
+  it('sustains unclosed LRC words and prevents premature line-switch cut-offs while the previous line is still singing', () => {
+    const doc = buildLyrics(
+      parse('[00:01.00]<00:01.00>Hello <00:02.00>world<00:03.00>\n[00:03.02]<00:03.02>Next <00:03.80>line'),
+      map,
+      30,
+    );
+    const plans = buildNpLinePlans(doc.lines, (t) => map.beatLen(t));
+    // Word 0 ("Hello") without explicit end stamp sustains up to Word 1 ("world") at 2.0s instead of stopping at 1.25s
+    expect(plans[0].words[0].t0).toBeCloseTo(1.0, 2);
+    expect(plans[0].words[0].t1).toBeCloseTo(2.0, 2);
+    expect(plans[0].words[1].t0).toBeCloseTo(2.0, 2);
+    expect(plans[0].words[1].t1).toBeCloseTo(3.0, 2);
+    expect(plans[0].sungEnd).toBeCloseTo(3.0, 2);
+    // Line 1 starts at 3.02s right after Line 0 ends at 3.00s: it must not switch at 3.02 - 0.15 = 2.87s while Line 0 sings
+    expect(plans[1].start).toBeGreaterThanOrEqual(plans[0].sungEnd);
+    // Unclosed final word on Line 1 ("line" at 3.80s) sustains well past 0.25s
+    expect(plans[1].words[1].t1 - plans[1].words[1].t0).toBeGreaterThanOrEqual(0.65);
+  });
+
+  it('preserves spaces in joined CJK phrases, timed space stamps, TTML space spans, and multi-word single timestamps', () => {
+    // 1) Spaced CJK words joined by phrasing + timed space stamp (<00:01.50> )
+    const cjkDoc = buildLyrics(
+      parse('[00:01.00]<00:01.00>清晨 <00:01.25>的 <00:01.80>光<00:02.20> <00:02.60>照亮<00:03.20>'),
+      map,
+      30,
+    );
+    const cjkPlan = buildNpLinePlans(cjkDoc.lines)[0];
+    const renderedCjk = cjkPlan.words.flatMap((w) => w.units.map((u) => u.c + (u.spaceAfter ? ' ' : ''))).join('');
+    expect(renderedCjk).toBe('清晨 的 光 照亮');
+
+    // 2) TTML whitespace-only timed span between words
+    const ttmlSpace = `<tt xmlns="http://www.w3.org/ns/ttml"><body><div>
+      <p begin="00:01.00" end="00:03.00"><span begin="00:01.00" end="00:01.50">Hello</span><span begin="00:01.50" end="00:01.60"> </span><span begin="00:01.60" end="00:02.50">世界</span></p>
+    </div></body></tt>`;
+    const ttmlSpaceDoc = buildLyrics(parseLyrics(ttmlSpace), map, 30);
+    const ttmlSpacePlan = buildNpLinePlans(ttmlSpaceDoc.lines)[0];
+    const renderedTtml = ttmlSpacePlan.words
+      .flatMap((w) => w.units.map((u) => u.c + (u.spaceAfter ? ' ' : '')))
+      .join('');
+    expect(renderedTtml).toBe('Hello 世界');
+
+    // 3) Single timestamp covering multiple space-separated words through respace()
+    const multiWordDoc = buildLyrics(respace(parse('[00:01.00]<00:01.00>I love <00:01.80>you<00:02.50>')), map, 30);
+    const multiWordPlan = buildNpLinePlans(multiWordDoc.lines)[0];
+    const renderedMulti = multiWordPlan.words
+      .flatMap((w) => w.units.map((u) => u.c + (u.spaceAfter ? ' ' : '')))
+      .join('');
+    expect(renderedMulti).toBe('I love you');
+
+    // 4) NpLyrics CSS avoids group-opacity division spike and uses break-spaces so trailing spaces do not hang
+    const css = readFileSync(new URL('../../src/app/ui/NpLyrics.module.css', import.meta.url), 'utf8');
+    expect(css).not.toContain('calc(var(--bu) /');
+    expect(css).toContain('white-space: break-spaces;');
   });
 });

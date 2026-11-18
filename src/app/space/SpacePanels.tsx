@@ -9,6 +9,7 @@ import { Lib, D } from '../bridge';
 import { Icon } from '../ui/icons';
 import { Seg, Cover, OUT_MS, usePresence } from '../ui/kit';
 import { useOnlineSurface } from '../ui/OnlineSurface';
+import { cleanBlankLyricRows, isTtml, ttmlToLrc } from '../../engine';
 import { NpLyrics } from '../ui/NpLyrics';
 import {
   player,
@@ -159,8 +160,9 @@ function Lyrics({
     [busy, setBusy] = useState(false);
   const [translating, setTranslating] = useState(false),
     [searching, setSearching] = useState(false);
+  const toEditableLrc = (x: string) => cleanBlankLyricRows(isTtml(x) ? ttmlToLrc(x) : x);
   useEffect(() => {
-    if (!hasLyrics && edit == null) setEdit(text);
+    if (!hasLyrics && edit == null) setEdit(toEditableLrc(text));
   }, [hasLyrics]);
   const save = async () => {
     if (edit == null) return;
@@ -182,7 +184,7 @@ function Lyrics({
       <header className={s.head}>
         <b>{edit != null ? ts('lyr.edit') : tx('s.lyricList')}</b>
         {edit == null && (
-          <button type="button" className={s.clear} onClick={() => setEdit(text)}>
+          <button type="button" className={s.clear} onClick={() => setEdit(toEditableLrc(text))}>
             {ts('lyr.edit')}
           </button>
         )}

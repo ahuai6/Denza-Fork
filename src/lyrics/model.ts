@@ -24,6 +24,7 @@ export interface BeatGrid {
 export interface Unit {
   c: string;
   /** sung time, or null when the line is timed only as a whole */ t: number | null;
+  /** explicit end time when given by TTML span or LRC empty stamp */ e?: number;
 }
 export interface Word {
   id: number;
@@ -72,6 +73,8 @@ export interface Line {
   reads?: string[];
   kar: boolean;
   rtl: boolean;
+  /** explicit line singing close time when given by LRC empty stamp or TTML end */
+  close?: number;
   /** spaced by the listener: its words as they wrote them (not joined by the singing) */
   own?: boolean;
 }
@@ -134,6 +137,7 @@ export function buildLyrics(p: Parsed, map: BeatGrid, end: number): LyricDoc {
       words: [],
       kar: !!R.kar,
       rtl: RE_RTL.test(R.text),
+      ...(R.close != null ? { close: R.close } : R.end != null ? { close: R.end } : {}),
       ...(R.own ? { own: true } : {}),
       ...(reads.length ? { reads } : {}),
     });
@@ -146,11 +150,21 @@ export function buildLyrics(p: Parsed, map: BeatGrid, end: number): LyricDoc {
     const timed = !!R.kar && R.words.every((w) => w.units && w.units.length);
     L.words = R.words.map((rw, k) => {
       const w = rw.text,
-        tu = timed ? rw.units!.map((u) => ({ c: u.c, t: Math.max(u.t, L.t) })) : null,
+        tu = timed
+          ? rw.units!.map((u) => ({
+              c: u.c,
+              t: Math.max(u.t, L.t),
+              ...(u.e != null ? { e: Math.max(u.e, L.t) } : {}),
+            }))
+          : null,
         units: Unit[] = tu ? tu : unitsOf(w).map((c) => ({ c, t: null })); // sung syllables stay whole
       const hu = rw.harm
         ? rw.harm.units?.length
-          ? rw.harm.units.map((u) => ({ c: u.c, t: Math.max(u.t, L.t) }))
+          ? rw.harm.units.map((u) => ({
+              c: u.c,
+              t: Math.max(u.t, L.t),
+              ...(u.e != null ? { e: Math.max(u.e, L.t) } : {}),
+            }))
           : unitsOf(rw.harm.text).map((c) => ({ c, t: null as number | null }))
         : null;
       return {
