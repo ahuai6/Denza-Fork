@@ -178,3 +178,9 @@
   3. **修复播放页歌词空格被吞**：修复 `parse.ts` 中空结束戳带空格（`<mm:ss.xx> `）及和声闭合括号后空格未设置 `gap = true`、`ttml.ts` 中纯空白计时 `<span begin end> </span>` 提前返回丢失 `gap = true`、`spacing.ts` `regroup` 对含内部空格的计时单元调用 `spacingKey(u.c)` 抹掉内部空格，以及 `NpLyrics.tsx` 按字符渲染时忽略 `w.disp` 内部空格的问题；同时将 `NpLyrics.module.css` 的 `.w` 改为 `white-space: break-spaces` 防止 `inline-block` 尾随空格悬挂塌缩（真实 Electron 实测带空格 `'晨 '` 宽度 `40.5px` vs `'清'` `34.3px`）。
   4. **下载歌词时自动删除空白行**：扩展 `cleanBlankLyricRows` 清理空白、纯时间戳、零宽字符及平台常见的 `//` 占位空行（`parse.ts` 与 `ttml.ts` 同步忽略独立 `//` 占位行），并在 `platforms.cjs`、`downloadLyricFormats`、`translationLrc`、经典 `Effect.tsx` 与空间 `SpacePanels.tsx` 歌词编辑入口统一清理。
 - 全量 43 个测试文件 / 450 项单元测试、类型检查、`online:deps:check`、`build:app` 与 `vite build --mode web` 全部通过；未覆盖边界同上。
+
+### 3.2.9-denza.9 Windows 最终构建
+
+- [工作流 44338734459](https://github.com/ahuai6/Denza-Fork/actions/runs/44338734459) 对 `custom` 提交 `a7022cb` 全部通过（耗时 12m47s）：43 个文件、450 项全量单元测试、类型检查、应用构建、模型资源拉取、`cadenza-audio.exe` 原生音频引擎、安装版（`Cadenza-Setup-3.2.9-denza.9.exe` `455.95 MB`）/便携版（`Cadenza-3.2.9-denza.9-portable.exe` `425.09 MB`，`resources/app.asar` `175.19 MB`、`app.asar.unpacked` `430.46 MB`）打包及 `scripts/packaged-smoke.cjs`（`Packaged modules and text runtime passed (9 models; no account sign-in)`）检查。
+- [构建产物 14443258095](https://github.com/ahuai6/Denza-Fork/actions/runs/44338734459/artifacts/14443258095) 包含安装版、便携版与 `SHA256SUMS.txt`。构建完成后仅补充验证与交接文档（`docs/**`），不修改应用运行代码；发布工作流再次校验提交已合并、运行/构建输入一致及资产 SHA256。
+- 完整经典/空间图形回归未在本次自动化构建中执行，以及真实在线账号、实体显示卡与 Windows 实机音频未实测的限制继续保留。

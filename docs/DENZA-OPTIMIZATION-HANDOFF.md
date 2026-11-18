@@ -150,7 +150,8 @@
 
 ## 本轮接手交接：3.2.9-denza.9（播放页逐字歌词闪烁修复 / TTML-LRC 结束时间与切句与多字同时间戳优化 / 空格保留 / 下载自动清理空行）
 
-- **基线与改动范围**：基于 `custom`（`6814970`，`3.2.9-denza.8`），围绕播放页逐字歌词渲染与在线歌词清洗链路完成改造。
+- **基线与改动范围**：基于 `custom`（`6814970`，`3.2.9-denza.8`），围绕播放页逐字歌词渲染与在线歌词清洗链路完成改造（运行代码提交 `a7022cb`）。
+- **Windows CI 构建**：[工作流 44338734459](https://github.com/ahuai6/Denza-Fork/actions/runs/44338734459)（产物 [14443258095](https://github.com/ahuai6/Denza-Fork/actions/runs/44338734459/artifacts/14443258095)）：43 文件 / 450 项单元测试全绿，安装版 `Cadenza-Setup-3.2.9-denza.9.exe` `455.95 MB`、便携版 `Cadenza-3.2.9-denza.9-portable.exe` `425.09 MB`，`app.asar` `175.19 MB`、`app.asar.unpacked` `430.46 MB`，`packaged-smoke.cjs` 通过（9 models; no account sign-in）。
 - **涉及文件与关键符号改动**：
   - `src/app/ui/NpLyrics.module.css`：移除 `.line` 的群组 `opacity: var(--o)` 与 `.line .w` 的 `--un: calc(var(--bu) / var(--o))` 除法，直接用 `rgba(255, 255, 255, var(--o))` / `rgba(255, 255, 255, var(--bu))` 绘制逐字渐变，根除 `data-on="true"` 激活瞬间未唱字闪白至 `1.0` 的问题；将 `.w` 的 `white-space: pre-wrap` 改为 `white-space: break-spaces` 防止 `inline-block` 尾随空格悬挂塌缩。
   - `src/lyrics/np-plan.ts`（新增，经 `src/engine/index.ts` 导出供 `src/app/ui/NpLyrics.tsx` 使用）：实现 `buildNpLinePlans(lines, beatLen)`，统一计算播放页每行激活起点 `start`、实际唱完时间 `sungEnd`、词与字符级显示单元 `units`（保留 `w.disp` 内部空格与词间 `w.gap`，将单时间戳多字符与连续相同时间戳按字符权重顺序拆分为独立子区间，未闭合词平滑延音至下一词或句尾，切句起点 `start >= pHoldEnd` 不再提前截断上一句尾字动画）。
