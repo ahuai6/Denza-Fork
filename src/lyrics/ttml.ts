@@ -262,7 +262,26 @@ function lineOf(p: El, b: number, e: number | null): RawLine | null {
   };
   const visit = (n: El | string, into: 'main' | 'bg') => {
     if (typeof n === 'string') {
-      if (/\s/.test(n) && into === 'main') gap = true;
+      if (into === 'main') {
+        const clean = n.replace(/[()（）]/g, '').trim();
+        if (clean) {
+          if (/^\s/.test(n) && cur && cur.units!.length) {
+            cur.gap = true;
+            flush();
+          }
+          const target = cur && cur.units!.length ? cur : words[words.length - 1];
+          if (target && target.units?.length && !gap && !/^\s/.test(n)) {
+            target.units[target.units.length - 1].c += clean;
+            target.text += clean;
+            if (/\s$/.test(n)) {
+              target.gap = true;
+              if (target === cur) flush();
+            }
+            return;
+          }
+        }
+        if (/\s/.test(n)) gap = true;
+      }
       return;
     }
     if (local(n.tag) === 'br') {

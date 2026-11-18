@@ -35,9 +35,8 @@ export function NowPlaying() {
     shownId = useStore(player, (x) => x.shownId),
     hasLyrics = useStore(player, (x) => x.hasLyrics),
     session = useStore(player, (x) => x.session),
-    instr = useStore(lib, () => !!trackOf(shownId)?.instrumental);
-  useStore(lib, (x) => x.tracks);
-  const t = trackOf(shownId);
+    t = useStore(lib, () => trackOf(shownId)),
+    instr = !!t?.instrumental;
   const amb = useRef<HTMLDivElement>(null),
     root = useRef<HTMLElement>(null),
     cover = useRef<HTMLDivElement>(null),

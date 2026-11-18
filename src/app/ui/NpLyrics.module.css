@@ -25,6 +25,7 @@
   inset: 0;
   overflow: hidden;
   padding: 0 8px;
+  contain: layout paint size;
 }
 .line {
   position: relative;
@@ -51,8 +52,12 @@
     --onk var(--t-slow) var(--ease),
     background var(--t-fast) var(--ease);
 }
-:global(html[data-gfx='lite']) .line {
+:global(html[data-gfx='lite']) .line,
+.line[data-far='true'] {
   filter: none;
+}
+.line[data-far='true'] {
+  transition: none;
 }
 /* like Apple Music: the line being sung is sharp, the others softer the further they are; all sharp while the user
    scrolls through them, and the one under the pointer */
@@ -94,13 +99,17 @@
   color: transparent;
   text-shadow: 0 0 14px rgba(255, 255, 255, calc(var(--gl, 0) * 0.3 * var(--onk)));
 }
-/* a line timed only as a whole: no sweep — the whole line brightens together, every word and character alike, by the
-   one fill the line holds */
+/* non-current lines and whole-timed lines need no per-word gradient clip mask */
+.line:not([data-on='true']):not([data-singing='true']) .w,
 .line[data-whole='true'] .w {
   background: none;
   -webkit-background-clip: border-box;
   background-clip: border-box;
   color: rgba(255, 255, 255, calc(var(--bu) + (var(--o) - var(--bu)) * var(--p, 0)));
+  text-shadow: none;
+}
+.line[data-whole='true'][data-on='true'] .w {
+  text-shadow: 0 0 14px rgba(255, 255, 255, calc(var(--gl, 0) * 0.3 * var(--onk)));
 }
 /* a line that was sung keeps its words where they lifted to, and lets them settle back softly */
 .line .w {

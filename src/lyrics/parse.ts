@@ -378,7 +378,12 @@ export function parse(src: string, off = 0, len = Infinity): Parsed {
     }
     const L: RawLine = { t: tt, text: '', subs: [], words: [] };
     if (/<\d+:\d+(?:[.:]\d+)?>/.test(body)) {
-      const k = parseKar(body, shift);
+      const firstTag = body.indexOf('<'),
+        leadTxt = firstTag > 0 ? body.slice(0, firstTag).replace(MARK, '').replace(NO_BOX, '').trim() : '';
+      const karBody = leadTxt
+        ? `<${Math.floor(Math.max(0, tt - shift) / 60)}:${(Math.max(0, tt - shift) % 60).toFixed(3)}>` + body
+        : body;
+      const k = parseKar(karBody, shift);
       if (!k.words.length) return;
       L.words = k.words;
       L.kar = k.words.map((w) => w.units || []);

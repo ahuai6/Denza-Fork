@@ -1,3 +1,9 @@
+## Denza-Fork 3.2.9-denza.10
+
+- 统一全场景逐字歌词多字符顺序点亮模型：在歌词模型层（`lyrics/model.ts`）将单个时间戳包含多个字符及连续相同时间戳的歌词单元按字符权重拆分为独立时序单元，使正在播放页、空间歌词面板、2D 特效歌词（`director/words.ts`）及空间 3D 悬浮场景歌词（`space/bind.ts` → `AirLyrics`）全部共用同一套逐字顺序点亮与空格保留逻辑。
+- 优化播放页歌词（`NpLyrics`）与经典模式 UI 渲染性能：缓存每行 DOM 节点引用消除每帧 `querySelectorAll` 查询；非当前行停用逐字 `linear-gradient` 文字裁剪遮罩与 `text-shadow` 发光重绘，当前行已唱完或未开唱字符跳过冗余样式写入，远端视口外歌词行跳过高斯模糊表面与弹簧子步更新；`LiveEq` 在暂停静止或窗口隐藏时自动休眠 `requestAnimationFrame` 循环；`Progress` 缓存进度与秒级文本；`NowPlaying` 与 `PlayerCard` 精确订阅当前曲目。
+- 补齐歌词解析与交互边界修复：保留逐字 LRC 首标签前的起始词、TTML `<p>` 内跨 `<span>` 标点文本、乱序/递减时间戳的单调归一化、向前跳进跨行完成态同步及播放页滚轮手动滚动边界钳制。
+
 ## Denza-Fork 3.2.9-denza.9
 
 - 修复播放页逐字歌词在即将唱到的前一刻整行突然全亮再变暗的闪烁问题：去除 `.line[data-on='true']` 立即跳变 `opacity: 1` 与 `.line .w` 中 `calc(var(--bu) / var(--o))` 的除法峰值，改为直接以 `--o`（已唱）与 `--bu`（未唱）驱动字色渐变并在切句同帧同步逐字进度。

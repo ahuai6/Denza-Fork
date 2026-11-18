@@ -148,16 +148,132 @@ export function buildLyrics(p: Parsed, map: BeatGrid, end: number): LyricDoc {
     const R = raw[i];
     // the words as the lyrics break them: at spaces only (an unspaced line is one word); their harmonies and chorus marks
     const timed = !!R.kar && R.words.every((w) => w.units && w.units.length);
+    const rawAll = timed
+      ? R.words.flatMap((rw) =>
+          (rw.units || []).map((u) => ({
+            t: Math.max(u.t, L.t),
+            e: u.e != null ? Math.max(u.e, L.t) : undefined,
+            n: Math.max(1, graphemes(u.c.replace(/\s+/g, '')).length),
+          })),
+        )
+      : [];
+    const charPaces: number[] = [];
+    for (let a = 0; a < rawAll.length; ) {
+      let b = a,
+        chars = rawAll[a].n;
+      while (b + 1 < rawAll.length && rawAll[b + 1].t <= rawAll[a].t + 1e-4) {
+        b++;
+        chars += rawAll[b].n;
+      }
+      if (b + 1 < rawAll.length) {
+        const dt = rawAll[b + 1].t - rawAll[a].t;
+        if (dt > 0.02) charPaces.push(dt / Math.max(1, chars));
+      } else if (rawAll[b].e != null && rawAll[b].e! > rawAll[a].t + 0.02) {
+        charPaces.push((rawAll[b].e! - rawAll[a].t) / Math.max(1, chars));
+      }
+      a = b + 1;
+    }
+    charPaces.sort((x, y) => x - y);
+    const pace = charPaces.length ? Math.min(0.85, Math.max(0.18, charPaces[charPaces.length >> 1])) : 0.38;
+
+    const wordSpans: { t0: number; t1: number; shared: boolean }[] = new Array(R.words.length);
+    if (timed) {
+      for (let wa = 0; wa < R.words.length; ) {
+        let wb = wa;
+        const runStart = Math.max(L.t, R.words[wa].units![0].t);
+        const allAtStart = (rw: (typeof R.words)[number]) =>
+          rw.units!.every((u) => Math.max(L.t, u.t) <= runStart + 1e-4);
+        if (allAtStart(R.words[wa])) {
+          while (wb + 1 < R.words.length && allAtStart(R.words[wb + 1])) wb++;
+        }
+        const lastRW = R.words[wb],
+          lu = lastRW.units![lastRW.units!.length - 1],
+          lastUnitT = Math.max(runStart, ...lastRW.units!.map((u) => Math.max(L.t, u.t))),
+          nextWordT = wb + 1 < R.words.length ? Math.max(L.t, R.words[wb + 1].units![0].t) : null;
+        let runEnd: number;
+        if (lu.e != null) {
+          const ge = Math.max(L.t, lu.e);
+          runEnd = nextWordT != null && nextWordT > runStart ? Math.min(ge, nextWordT) : ge;
+        } else if (nextWordT != null && nextWordT > lastUnitT) {
+          const lc = Math.max(1, graphemes(lu.c.replace(/\s+/g, '')).length);
+          runEnd = Math.min(nextWordT, lastUnitT + Math.max(1.4, pace * 2.4 * lc));
+        } else if (L.close != null && L.close > lastUnitT) {
+          runEnd = L.close;
+        } else {
+          const lc = Math.max(1, graphemes(lu.c.replace(/\s+/g, '')).length),
+            nextLineT = i + 1 < lines.length ? lines[i + 1].t : L.end,
+            cap = nextLineT > lastUnitT ? nextLineT : Math.max(lastUnitT + 0.65, L.end);
+          runEnd = Math.min(cap, lastUnitT + Math.max(0.65, pace * 1.6 * lc));
+        }
+        runEnd = Math.max(runEnd, lastUnitT + 0.12);
+        if (wb === wa) {
+          wordSpans[wa] = { t0: runStart, t1: runEnd, shared: false };
+        } else {
+          const weights = R.words
+              .slice(wa, wb + 1)
+              .map((rw) => Math.max(1, graphemes(rw.text.replace(/\s+/g, '')).length)),
+            totalW = Math.max(
+              1,
+              weights.reduce((a, b) => a + b, 0),
+            );
+          let acc = 0;
+          for (let m = wa; m <= wb; m++) {
+            const w0 = runStart + ((runEnd - runStart) * acc) / totalW;
+            acc += weights[m - wa];
+            const w1 = runStart + ((runEnd - runStart) * acc) / totalW;
+            wordSpans[m] = { t0: w0, t1: Math.max(w0 + 0.08, w1), shared: true };
+          }
+        }
+        wa = wb + 1;
+      }
+    }
+
     L.words = R.words.map((rw, k) => {
       const w = rw.text,
-        tu = timed
-          ? rw.units!.map((u) => ({
-              c: u.c,
-              t: Math.max(u.t, L.t),
-              ...(u.e != null ? { e: Math.max(u.e, L.t) } : {}),
-            }))
-          : null,
-        units: Unit[] = tu ? tu : unitsOf(w).map((c) => ({ c, t: null })); // sung syllables stay whole
+        latin = isLatin(w),
+        complex = RE_COMPLEX.test(w),
+        splitChars = !latin && !complex;
+      let tu: Unit[] | null = null;
+      if (timed) {
+        tu = [];
+        const { t0: wStart, t1: wEnd, shared } = wordSpans[k],
+          rawU = rw.units!;
+        for (let ua = 0; ua < rawU.length; ) {
+          let ub = ua;
+          const baseT = shared ? wStart : Math.max(L.t, rawU[ua].t);
+          while (ub + 1 < rawU.length && (shared ? wStart : Math.max(L.t, rawU[ub + 1].t)) <= baseT + 1e-4) ub++;
+          const lastU = rawU[ub],
+            nextUT = !shared && ub + 1 < rawU.length ? Math.max(L.t, rawU[ub + 1].t) : null;
+          const pieces: string[] = [];
+          for (let m = ua; m <= ub; m++) {
+            const uc = rawU[m].c;
+            if (splitChars) {
+              const gs = graphemes(uc.replace(/\s+/g, ''));
+              pieces.push(...(gs.length ? gs : [uc]));
+            } else {
+              pieces.push(uc);
+            }
+          }
+          let uRunEnd: number;
+          if (!shared && lastU.e != null) {
+            const ge = Math.max(L.t, lastU.e);
+            uRunEnd = nextUT != null && nextUT > baseT ? Math.min(ge, nextUT) : Math.min(ge, wEnd);
+          } else if (nextUT != null && nextUT > baseT) {
+            uRunEnd = Math.min(nextUT, baseT + Math.max(1.4, pace * 2.4 * pieces.length));
+          } else {
+            uRunEnd = wEnd;
+          }
+          uRunEnd = Math.max(uRunEnd, baseT + 0.08);
+          const nP = Math.max(1, pieces.length);
+          for (let r = 0; r < nP; r++) {
+            const u0 = baseT + ((uRunEnd - baseT) * r) / nP,
+              u1 = baseT + ((uRunEnd - baseT) * (r + 1)) / nP;
+            tu.push({ c: pieces[r], t: u0, e: Math.max(u0 + 0.08, u1) });
+          }
+          ua = ub + 1;
+        }
+      }
+      const units: Unit[] = tu ? tu : unitsOf(w).map((c) => ({ c, t: null })); // sung syllables stay whole
       const hu = rw.harm
         ? rw.harm.units?.length
           ? rw.harm.units.map((u) => ({
@@ -176,9 +292,9 @@ export function buildLyrics(p: Parsed, map: BeatGrid, end: number): LyricDoc {
         t: tu ? tu[0].t! : L.t,
         end: 0,
         timed: !!tu,
-        latin: isLatin(w),
-        cjk: RE_CJK.test(w) && !RE_COMPLEX.test(w),
-        complex: RE_COMPLEX.test(w),
+        latin,
+        cjk: RE_CJK.test(w) && !complex,
+        complex,
         group: 0,
         rest: 0,
         harm: rw.harm && hu ? { text: rw.harm.text, units: hu, t: hu[0]?.t ?? NaN } : null,

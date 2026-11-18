@@ -184,3 +184,14 @@
 - [工作流 44338734459](https://github.com/ahuai6/Denza-Fork/actions/runs/44338734459) 对 `custom` 提交 `a7022cb` 全部通过（耗时 12m47s）：43 个文件、450 项全量单元测试、类型检查、应用构建、模型资源拉取、`cadenza-audio.exe` 原生音频引擎、安装版（`Cadenza-Setup-3.2.9-denza.9.exe` `455.95 MB`）/便携版（`Cadenza-3.2.9-denza.9-portable.exe` `425.09 MB`，`resources/app.asar` `175.19 MB`、`app.asar.unpacked` `430.46 MB`）打包及 `scripts/packaged-smoke.cjs`（`Packaged modules and text runtime passed (9 models; no account sign-in)`）检查。
 - [构建产物 14443258095](https://github.com/ahuai6/Denza-Fork/actions/runs/44338734459/artifacts/14443258095) 包含安装版、便携版与 `SHA256SUMS.txt`。构建完成后仅补充验证与交接文档（`docs/**`），不修改应用运行代码；发布工作流再次校验提交已合并、运行/构建输入一致及资产 SHA256。
 - 完整经典/空间图形回归未在本次自动化构建中执行，以及真实在线账号、实体显示卡与 Windows 实机音频未实测的限制继续保留。
+
+## 3.2.9-denza.10 全场景逐字多字符顺序点亮统一化、播放页与经典 UI 性能优化及边界修复
+
+- 按照 `.claude/skills/cadenza/SKILL.md`“歌词模型是唯一文字与时序来源”的分层原则，将单时间戳多字符与连续相同时间戳的逐字拆分下沉至 `src/lyrics/model.ts`（`buildLyrics`），并通过 `src/lyrics/np-plan.ts` 与 `src/app/space/bind.ts` 统一供给三大出口：
+  1. **正在播放页与空间歌词面板（`NpLyrics`）**、**2D 特效歌词（`director/layout.ts` + `director/words.ts` `unitPose`）** 与 **空间 3D 场景悬浮歌词（`space/bind.ts` `charTimes` → `AirLyrics.hover`）** 均从 `doc.lines` 读取拆分后的逐字时序与保留空格文本。单元测试与真实 Electron 探测确认：`<00:01.00>我们的<00:02.20>故<00:02.20>事<00:03.00>` 在 `buildLyrics` 中生成 `['我', 1.0], ['们', 1.4], ['的', 1.8], ['故', 2.2], ['事', 2.6]`，2D 特效歌词 `unitPose` 在 `1.1s / 1.5s / 1.9s` 的 `ghost` 状态依次为 `[false, true, true] -> [false, false, true] -> [false, false, false]`，空间 3D 场景歌词 `charTimes` 逐字一一对应。
+  2. **播放页歌词与经典模式 UI 性能优化**：
+     - `NpLyrics.tsx` 在 `measure()` 一次性缓存每行 `[data-w]`、`[data-u]`、`[data-h]` 与 `leaves` 数组，帧循环 `paintLine` 与切句 `mark` 实现零 `querySelectorAll` 调用；
+     - `NpLyrics.module.css` 为 `.lyr` 增加 `contain: layout paint size`，非激活行（`.line:not([data-on='true']):not([data-singing='true']) .w`）关闭 `linear-gradient` + `-webkit-background-clip: text` 与 `text-shadow`，仅在当前演唱行启用渐变裁剪，已唱完字符（`t >= t1 + 0.22`）自动将 `--gl` 归零并以常量字符串命中 `put()` 缓存；距离当前行超过 10 行的远端行标记 `data-far="true"`，跳过 `filter: blur(...)` 离屏纹理分配与弹簧逐帧 `transform` 写入；
+     - `LiveEq.tsx` 在暂停衰减稳定或 `document.hidden` 时自动停止 `requestAnimationFrame` 循环并在播放恢复时唤醒，缓存 `scaleY` 字符串避免重复写 DOM；`Player.tsx` 的 `Progress` 缓存 `--k` 与秒级时间文本；`NowPlaying.tsx` 与 `PlayerCard` 改为订阅 `trackOf(id)`，避免后台分析或曲库无关字段变更触发整页重渲染；`Shell.tsx` `Activity` 使用 `useMemo` 复用统计。
+  3. **边界情况修复与测试**：修复逐字 LRC 首标签前前导词（`[00:01.00]Hello <00:01.50>world`）被丢弃、TTML `<p>` 内跨 `<span>` 标点文本（`<span>Hello</span>, <span>world</span>`）丢失、乱序/递减时间戳（`<00:02.00>甲<00:01.80>乙`）导致时长异常、向前大幅跳进（Forward Seek）被跨过的歌词行未置为 `data-completed="true"` / `--p = 1`，以及播放页鼠标滚轮无界滚动越出列表的问题。
+- 全量 43 个测试文件 / 452 项单元测试、类型检查、`online:deps:check`、`build:app`、`vite build --mode web` 及真实 Electron 性能/边界探测全部通过；未覆盖边界同上。

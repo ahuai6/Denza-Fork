@@ -46,15 +46,30 @@ export function Progress({ className = '', times = true }: { className?: string;
     drag = useRef(false);
   const end = () => player.get().session?.musicEnd || 0.01;
   useEffect(() => {
+    let lastK = '',
+      lastSec = -1,
+      lastTot = -1;
     const paint = (t: number) => {
       const d = end(),
-        k = Math.min(1, Math.max(0, t / d));
-      bar.current?.style.setProperty('--k', k.toFixed(5));
-      txt(bar.current, 'aria-valuenow', String(Math.round(t)));
-      // (the ending after the music is not counted: the time stops at the song's length)
-      // (the times written only when they change — once a second —: a text written anew each frame is a layout each frame)
-      txt(cur.current, '', fmtTime(Math.min(t, d)));
-      txt(tot.current, '', fmtTime(d));
+        k = Math.min(1, Math.max(0, t / d)),
+        kStr = k.toFixed(5);
+      if (kStr !== lastK) {
+        lastK = kStr;
+        bar.current?.style.setProperty('--k', kStr);
+      }
+      const sec = Math.floor(Math.min(t, d));
+      if (sec !== lastSec) {
+        lastSec = sec;
+        txt(bar.current, 'aria-valuenow', String(Math.round(t)));
+        // (the ending after the music is not counted: the time stops at the song's length)
+        // (the times written only when they change — once a second —: a text written anew each frame is a layout each frame)
+        txt(cur.current, '', fmtTime(Math.min(t, d)));
+      }
+      const totSec = Math.floor(d);
+      if (totSec !== lastTot) {
+        lastTot = totSec;
+        txt(tot.current, '', fmtTime(d));
+      }
     };
     paint(engine.time);
     const a = engine.on('tick', (p) => paint(p.t)),
@@ -262,9 +277,8 @@ export function PlayerCard() {
     dir = useStore(player, (x) => x.dir),
     onStage = useStore(ui, (x) => x.layer !== 'none'),
     // (full screen on the play page, the pointer still: the bar rests out of sight with the page's own controls)
-    idle = useStore(ui, (x) => x.idle && x.layer === 'np');
-  useStore(lib, (x) => x.tracks);
-  const t = trackOf(id),
+    idle = useStore(ui, (x) => x.idle && x.layer === 'np'),
+    t = useStore(lib, () => trackOf(id)),
     card = useRef<HTMLDivElement>(null),
     mini = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {

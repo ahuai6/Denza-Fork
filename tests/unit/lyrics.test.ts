@@ -5,6 +5,10 @@ import { buildLyrics, FUSE } from '../../src/lyrics/model';
 import { buildNpLinePlans } from '../../src/lyrics/np-plan';
 import { respace } from '../../src/lyrics/spacing';
 import { RhythmMap } from '../../src/rhythm/map';
+import { plan } from '../../src/director';
+import { wordState, unitPose } from '../../src/director/words';
+import { approxMeasurer } from '../../src/text/metrics';
+import { presetStyle } from '../../src/theme/style';
 
 const map = RhythmMap.grid(120, 0, 120);
 describe('lyrics', () => {
@@ -239,5 +243,85 @@ describe('Now Playing word-timed schedule, multi-char timestamps and space prese
     const css = readFileSync(new URL('../../src/app/ui/NpLyrics.module.css', import.meta.url), 'utf8');
     expect(css).not.toContain('calc(var(--bu) /');
     expect(css).toContain('white-space: break-spaces;');
+  });
+
+  it('unifies sequential character lighting across 2D Effect Lyrics (director/words) and 3D Space Scene Lyrics (charTimes)', () => {
+    const doc = buildLyrics(
+      parse('[00:01.00]<00:01.00>我们的<00:02.20>故<00:02.20>事<00:03.00>\n[00:05.00]next'),
+      map,
+      30,
+    );
+    // 1) Unified model.ts units: already decomposed into 5 sequential character units
+    const modelUnits = doc.lines[0].words.flatMap((w) => w.units);
+    expect(modelUnits.map((u) => u.c)).toEqual(['我', '们', '的', '故', '事']);
+    expect(modelUnits.map((u) => Number(u.t?.toFixed(2)))).toEqual([1.0, 1.4, 1.8, 2.2, 2.6]);
+
+    // 2) 2D Effect Lyrics (plan + wordState + unitPose): characters light one by one from ghost -> lit
+    const scene = plan({
+      doc,
+      map,
+      style: presetStyle('cover'),
+      measure: approxMeasurer(),
+      aspect: 16 / 9,
+      musicEnd: 30,
+      endLen: 3.5,
+      song: { on: true, title: 'T', artist: 'A' },
+      labels: { composer: 'c', lyricist: 'l', artist: 'a' },
+    });
+    const pw = scene.lines[0].words[0];
+    const ctx = {
+      enter: 0.25,
+      tempo: 1,
+      float: 0,
+      future: 'dim' as const,
+      smooth: true,
+      punch: 0.3,
+      motion: 1,
+      drift: false,
+    };
+    const ghostsAt = (t: number) => {
+      const ws = wordState(pw, t, 0, false, ctx)!;
+      return pw.units.slice(0, 3).map((_, ui) => unitPose(pw, ui, t, ws, 0, ctx)!.ghost);
+    };
+    // At t=1.10s: '我' is lit (ghost=false), while '们' and '的' are still ghosts (ghost=true)
+    expect(ghostsAt(1.1)).toEqual([false, true, true]);
+    // At t=1.50s: '我' and '们' are lit, while '的' is still a ghost
+    expect(ghostsAt(1.5)).toEqual([false, false, true]);
+    // At t=1.90s: all three '我', '们', '的' are lit
+    expect(ghostsAt(1.9)).toEqual([false, false, false]);
+
+    // 3) 3D Space Scene Lyrics (plan.charTimes fed into AirLine.times): one sequential timestamp per character
+    const npPlan = buildNpLinePlans(doc.lines, (t) => map.beatLen(t))[0];
+    expect(npPlan.charTimes.map((t) => Number(t.toFixed(2)))).toEqual([1.0, 1.4, 1.8, 2.2, 2.6]);
+  });
+
+  it('handles edge cases: leading text before first <tag>, TTML inline punctuation, out-of-order stamps, and empty lists', () => {
+    expect(buildNpLinePlans([])).toEqual([]);
+
+    // Leading word before first <mm:ss.xx> tag
+    const leadDoc = buildLyrics(parse('[00:01.00]Hello <00:01.50>world<00:02.00>'), map, 30);
+    expect(leadDoc.lines[0].words.map((w) => [w.text, w.t])).toEqual([
+      ['Hello', 1.0],
+      ['world', 1.5],
+    ]);
+
+    // TTML plain text punctuation between timed spans
+    const ttmlPunct = `<tt xmlns="http://www.w3.org/ns/ttml"><body><div>
+      <p begin="00:01.00" end="00:02.20"><span begin="00:01.00" end="00:01.50">Hello</span>, <span begin="00:01.60" end="00:02.20">world</span></p>
+    </div></body></tt>`;
+    const punctPlan = buildNpLinePlans(buildLyrics(parseLyrics(ttmlPunct), map, 30).lines)[0];
+    expect(punctPlan.text).toBe('Hello, world');
+
+    // Out-of-order / decreasing timestamps within a line are normalized to strictly increasing intervals
+    const outOfOrderDoc = buildLyrics(parse('[00:02.00]<00:02.00>甲<00:01.80>乙<00:02.60>丙<00:03.00>'), map, 30);
+    const outUnits = buildNpLinePlans(outOfOrderDoc.lines)[0].words.flatMap((w) => w.units);
+    expect(outUnits.map((u) => u.c)).toEqual(['甲', '乙', '丙']);
+    for (const u of outUnits) {
+      expect(Number.isFinite(u.t0)).toBe(true);
+      expect(Number.isFinite(u.t1)).toBe(true);
+      expect(u.t1).toBeGreaterThan(u.t0);
+    }
+    expect(outUnits[1].t0).toBeGreaterThan(outUnits[0].t0);
+    expect(outUnits[2].t0).toBeGreaterThan(outUnits[1].t0);
   });
 });

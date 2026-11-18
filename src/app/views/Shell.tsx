@@ -313,17 +313,17 @@ function Activity() {
   const prog = useStore(lib, (x) => x.progress),
     tracks = useStore(lib, (x) => x.tracks),
     an = useStore(lib, (x) => x.analysis);
-  let done = 0,
-    total = 0;
-  // (without a progress event yet: the songs read by this version of the rhythm analysis — an older one is to be redone)
-  if (an) {
-    done = an.done;
-    total = an.total;
-  } else {
-    const playable = tracks.filter((t) => !t.protected);
-    total = playable.length;
-    done = playable.filter((t) => t.analyzed === RHYTHM_VERSION).length;
-  }
+  const { done, total } = useMemo(() => {
+    if (an) return { done: an.done, total: an.total };
+    let d = 0,
+      tot = 0;
+    for (const t of tracks) {
+      if (t.protected) continue;
+      tot++;
+      if (t.analyzed === RHYTHM_VERSION) d++;
+    }
+    return { done: d, total: tot };
+  }, [an, tracks]);
   const text = prog.phase === 'scan' ? tx('s.scanning', prog) : done < total ? tx('s.analyzing', { done, total }) : '';
   if (!text) return null;
   return (

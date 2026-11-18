@@ -35,7 +35,16 @@ interface LS {
   ty: number;
   at: number;
   next: number;
+  yStr: string;
 }
+interface LineDom {
+  ws: HTMLElement[];
+  us: HTMLElement[][];
+  hs: HTMLElement[];
+  leaves: HTMLElement[];
+}
+const LIFT_END = `0 ${(-LIFT).toFixed(2)}px`;
+const HARM_LIFT_END = `0 ${(-LIFT * 0.6).toFixed(2)}px`;
 /** A style written only when it changes: the sung line is painted every frame, but most of its words are sung already or
  *  not yet — writing their same values again made the browser restyle them all each frame for nothing. */
 const wrote = new WeakMap<HTMLElement, Record<string, string>>();
@@ -75,6 +84,7 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
   const st = useRef({
     tops: [] as number[],
     ls: [] as (LS | null)[],
+    dom: [] as (LineDom | null)[],
     cur: -2,
     manual: 0,
     raf: 0,
@@ -127,6 +137,18 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
     let moving = false;
     for (const w of S.ls) {
       if (!w) continue;
+      if (!S.manual && w.el.dataset.far === 'true') {
+        if (w.y !== w.next || w.ty !== w.next) {
+          w.y = w.ty = w.next;
+          w.v = 0;
+          const yStr = w.y.toFixed(2);
+          if (w.yStr !== yStr) {
+            w.yStr = yStr;
+            w.el.style.transform = `translate3d(0,${yStr}px,0)`;
+          }
+        }
+        continue;
+      }
       if (now >= w.at && w.ty !== w.next) w.ty = w.next;
       if (w.ty !== w.next) moving = true;
       for (let k = 0; k < 2; k++) {
@@ -139,7 +161,11 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
         w.y = w.ty;
         w.v = 0;
       }
-      w.el.style.transform = `translate3d(0,${w.y.toFixed(2)}px,0)`;
+      const yStr = w.y.toFixed(2);
+      if (w.yStr !== yStr) {
+        w.yStr = yStr;
+        w.el.style.transform = `translate3d(0,${yStr}px,0)`;
+      }
     }
     placeDots();
     S.raf = moving ? requestAnimationFrame(step) : 0;
@@ -169,7 +195,9 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
         w.y = w.ty = ty;
         w.v = 0;
         w.at = now;
-        w.el.style.transform = `translate3d(0,${ty}px,0)`;
+        const yStr = ty.toFixed(2);
+        w.yStr = yStr;
+        w.el.style.transform = `translate3d(0,${yStr}px,0)`;
       }
     });
     if (!jump) kick();
@@ -178,13 +206,15 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
   // (one state of light per line: a line timed only as a whole has a single fill and glow on the line itself, which its
   // words, their characters and its harmonies all inherit — none carries one of its own, so no row or character can
   // light at another moment than the rest; a line timed word by word has one on each of its drawn words or characters)
-  const leaves = (el: HTMLElement) => el.querySelectorAll<HTMLElement>('[data-w]:not([data-u-w]), [data-u], [data-h]');
+  const leavesOf = (i: number, el: HTMLElement) =>
+    st.current.dom[i]?.leaves ?? [...el.querySelectorAll<HTMLElement>('[data-w]:not([data-u-w]), [data-u], [data-h]')];
   const paintLine = (i: number, t = engine.time) => {
     const L = lines[i],
       plan = plans[i],
       el = lineEls.current[i];
     if (!L || !plan || !el) return;
-    const ws = el.querySelectorAll<HTMLElement>('[data-w]'),
+    const dom = st.current.dom[i],
+      ws = dom ? dom.ws : [...el.querySelectorAll<HTMLElement>('[data-w]')],
       lvl = st.current.lvl;
     // a line timed only as a whole lights as a whole, at once, from the moment it is the current line (or its own time,
     // if that is sooner), as Apple Music does: one fill on the line — never dark while current, never faded in
@@ -192,23 +222,39 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
     if (!L.kar) {
       const on = t >= t0w ? 1 : 0;
       put(el, '--p', String(on));
-      put(el, '--gl', (0.6 * lvl * on).toFixed(3));
+      put(el, '--gl', on ? (0.6 * lvl).toFixed(2) : '0');
     }
     // each word: its fill (how far it is sung), its glow (only once it is all but sung) and its own lift as it is sung
     plan.words.forEach((wp, k) => {
       const e = ws[k];
       if (!e) return;
       const fill = (node: HTMLElement, t0: number, t1: number) => {
-        const q = Math.min(1, Math.max(0, (t - t0) / Math.max(0.08, t1 - t0))),
-          gl = Math.min(1, Math.max(0, (q - 0.6) / 0.4));
-        put(node, '--p', q.toFixed(3));
-        put(node, '--gl', (gl * gl * lvl).toFixed(3));
-        put(node, 'translate', `0 ${(-LIFT * liftAt(t - t0, t1 - t0)).toFixed(2)}px`);
+        if (t <= t0) {
+          put(node, '--p', '0');
+          put(node, '--gl', '0');
+          put(node, 'translate', '');
+          return;
+        }
+        const dur = Math.max(0.08, t1 - t0),
+          dt = t - t0;
+        if (t >= t1 + 0.22 && dt >= Math.max(0.2, dur)) {
+          put(node, '--p', '1');
+          put(node, '--gl', '0');
+          put(node, 'translate', LIFT_END);
+          return;
+        }
+        const q = Math.min(1, dt / dur),
+          glIn = Math.min(1, Math.max(0, (q - 0.6) / 0.4)),
+          glOut = t <= t1 ? 1 : Math.max(0, 1 - (t - t1) / 0.22),
+          gl = glIn * glOut;
+        put(node, '--p', q >= 1 ? '1' : q.toFixed(3));
+        put(node, '--gl', gl < 0.01 ? '0' : (gl * gl * lvl).toFixed(2));
+        put(node, 'translate', `0 ${(-LIFT * liftAt(dt, dur)).toFixed(2)}px`);
       };
       // a word drawn character by character (one that may wrap onto the next row): each character fills in its own
       // time, so a second row lights up only once it is sung
       if (wp.byUnit && L.kar) {
-        const us = e.querySelectorAll<HTMLElement>('[data-u]');
+        const us = dom ? dom.us[k] : [...e.querySelectorAll<HTMLElement>('[data-u]')];
         wp.units.forEach((up, ui) => {
           const uEl = us[ui];
           if (uEl) fill(uEl, up.t0, up.t1);
@@ -217,7 +263,7 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
       else fill(e, wp.t0, wp.t1);
     });
     // the harmonies: each from its own first sound to its last (at least as long as the word it goes with)
-    const hs = el.querySelectorAll<HTMLElement>('[data-h]');
+    const hs = dom ? dom.hs : [...el.querySelectorAll<HTMLElement>('[data-h]')];
     plan.harms.forEach((hp, k) => {
       const e = hs[k];
       if (!e) return;
@@ -225,9 +271,21 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
         put(e, 'translate', '');
         return;
       }
-      const q = Math.min(1, Math.max(0, (t - hp.t0) / Math.max(0.08, hp.t1 - hp.t0)));
-      put(e, '--p', q.toFixed(3));
-      put(e, 'translate', `0 ${(-LIFT * 0.6 * liftAt(t - hp.t0, hp.t1 - hp.t0)).toFixed(2)}px`);
+      if (t <= hp.t0) {
+        put(e, '--p', '0');
+        put(e, 'translate', '');
+        return;
+      }
+      const dur = Math.max(0.08, hp.t1 - hp.t0),
+        dt = t - hp.t0;
+      if (t >= hp.t1 && dt >= Math.max(0.2, dur)) {
+        put(e, '--p', '1');
+        put(e, 'translate', HARM_LIFT_END);
+        return;
+      }
+      const q = Math.min(1, dt / dur);
+      put(e, '--p', q >= 1 ? '1' : q.toFixed(3));
+      put(e, 'translate', `0 ${(-LIFT * 0.6 * liftAt(dt, dur)).toFixed(2)}px`);
     });
   };
   const mark = (idx: number, t = engine.time) => {
@@ -235,20 +293,24 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
       if (!el) return;
       const d = i - idx,
         whole = !lines[i]?.kar;
-      // a line left in the wake above the current one: finish its words so none stays half-filled or half-lifted
-      if (d < 0 && el.dataset.on === 'true') {
-        leaves(el).forEach((w) => {
-          if (w.style.translate && !whole) put(w, 'translate', `0 ${w.dataset.h != null ? -LIFT * 0.6 : -LIFT}px`);
-          if (!whole) put(w, '--p', '1');
+      // a line left in the wake above the current one (including lines skipped over by a forward seek): finish its words
+      if (d < 0 && el.dataset.completed !== 'true') {
+        leavesOf(i, el).forEach((w) => {
+          if (!whole) {
+            put(w, 'translate', w.dataset.h != null ? HARM_LIFT_END : LIFT_END);
+            put(w, '--p', '1');
+          }
           put(w, '--gl', '0');
         });
         if (whole) put(el, '--p', '1');
         put(el, '--gl', '0');
+        el.dataset.completed = 'true';
       }
+      if (d >= 0 && el.dataset.completed === 'true') delete el.dataset.completed;
       // a line still to come holds nothing from an earlier pass (a seek back, or the line of another song that had this
       // place): its words wait at rest, unlit — never lifted, to drop the moment its voice comes in
       if (d > 0 && (el.dataset.sung === 'true' || el.dataset.on === 'true')) {
-        leaves(el).forEach((w) => {
+        leavesOf(i, el).forEach((w) => {
           put(w, 'translate', '');
           put(w, '--p', '0');
           put(w, '--gl', '0');
@@ -260,7 +322,7 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
       if (d <= 0) el.dataset.sung = 'true';
       // (becoming current, a line timed as a whole starts from dark on the line itself, its parts holding nothing of their own)
       if (d === 0 && whole) {
-        leaves(el).forEach((w) => {
+        leavesOf(i, el).forEach((w) => {
           w.style.removeProperty('--p');
           w.style.removeProperty('--gl');
           const m = wrote.get(w);
@@ -272,8 +334,12 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
         put(el, '--p', '0');
         put(el, '--gl', '0');
       }
-      el.style.setProperty('--d', String(Math.min(5, Math.abs(d))));
-      el.dataset.on = String(d === 0);
+      put(el, '--d', String(Math.min(5, Math.abs(d))));
+      const isOn = String(d === 0);
+      if (el.dataset.on !== isOn) el.dataset.on = isOn;
+      if (el.dataset.singing === 'true' && d !== 1) delete el.dataset.singing;
+      const isFar = !st.current.manual && Math.abs(d) > 10 ? 'true' : 'false';
+      if (el.dataset.far !== isFar) el.dataset.far = isFar;
     });
     if (idx >= 0) paintLine(idx, t);
   };
@@ -286,7 +352,15 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
     const fs = lineEls.current.find(Boolean);
     S.gap = fs ? Math.round(parseFloat(getComputedStyle(fs).fontSize) * 0.9) : 0;
     if (box.current) box.current.style.setProperty('--gap', S.gap + 'px');
-    S.ls = lineEls.current.map((el) => (el ? { el, y: 0, v: 0, ty: 0, at: 0, next: 0 } : null));
+    S.ls = lineEls.current.map((el) => (el ? { el, y: 0, v: 0, ty: 0, at: 0, next: 0, yStr: '' } : null));
+    S.dom = lineEls.current.map((el) => {
+      if (!el) return null;
+      const ws = [...el.querySelectorAll<HTMLElement>('[data-w]')],
+        us = ws.map((w) => [...w.querySelectorAll<HTMLElement>('[data-u]')]),
+        hs = [...el.querySelectorAll<HTMLElement>('[data-h]')],
+        leaves = [...el.querySelectorAll<HTMLElement>('[data-w]:not([data-u-w]), [data-u], [data-h]')];
+      return { ws, us, hs, leaves };
+    });
   };
   useLayoutEffect(() => {
     // (before the first line: none is current — the first is not lit before it is sung)
@@ -294,6 +368,8 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
     // (the dots of a wait belong to this set of lines: a wait of the song before is not carried over — kept, the new
     // song's first line never got its dots when it was waited for at the same place)
     S.wait = -1;
+    S.manual = 0;
+    if (box.current) box.current.dataset.manual = 'false';
     measure();
     const i = findLine(engine.time);
     S.cur = i;
@@ -315,6 +391,8 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
     return () => {
       cancelAnimationFrame(S.raf);
       S.raf = 0;
+      clearTimeout(S.mTm);
+      S.mTm = 0;
       ro.disconnect();
     };
   }, [lines, view.size, view.subs, view.reads]); // (a new size or the translations shown or not: the lines are measured again)
@@ -370,19 +448,28 @@ export function NpLyrics({ lines, live, compact = false }: { lines: Line[]; live
       }
       // (the current line — and a line already begun under it, still waiting to be current: its words are sung meanwhile)
       paintLine(i, p.t);
-      if (lines[i + 1] && p.t >= lines[i + 1].t) paintLine(i + 1, p.t);
+      if (lines[i + 1] && p.t >= lines[i + 1].t) {
+        const nextEl = lineEls.current[i + 1];
+        if (nextEl && nextEl.dataset.singing !== 'true') nextEl.dataset.singing = 'true';
+        paintLine(i + 1, p.t);
+      }
     });
   }, [lines, live]);
   const wheel = (e: React.WheelEvent) => {
-    const S = st.current;
-    S.manual -= e.deltaY;
+    const S = st.current,
+      a = S.tops[Math.max(0, S.cur)] || 0,
+      lastTop = S.tops[Math.max(0, S.tops.length - 1)] || 0,
+      minM = Math.min(0, a - lastTop - 40),
+      maxM = Math.max(0, a + 40);
+    S.manual = Math.max(minM, Math.min(maxM, S.manual - e.deltaY));
     clearTimeout(S.mTm);
     aim(S.cur, false, false);
     if (box.current) box.current.dataset.manual = 'true';
     S.mTm = window.setTimeout(() => {
       S.manual = 0;
-      aim(S.cur, false, false);
       if (box.current) box.current.dataset.manual = 'false';
+      mark(S.cur);
+      aim(S.cur, false, false);
     }, 2600);
   };
   return (

@@ -162,3 +162,16 @@
   - 切句前夕（`t = 2.90s`，上一句 `2.95s` 结束，下一句 `3.20s` 开始）：修改前 `starts[1]` 在 `lastW.end <= L.t` 时回退 `L.t - 0.15` 导致紧邻句提前切句并强行置 `--p = 1`；修改后 `t = 2.90s` 时上一句保持 `data-on="true"`、尾字 `--p = 0.947` 自然推进至 `2.95s`。
   - 单时间戳多字符与同时间戳（`<00:03.20>我们的<00:04.40>故<00:04.40>事<00:05.20>`）：5 个字符在 `3.40s..5.00s` 依次推进 `[0.5,0,0,0,0] -> [1,0.5,0,0,0] -> [1,1,0.5,0,0] -> [1,1,1,0.5,0] -> [1,1,1,1,0.5]`。
   - 空格宽度（`"清晨 的 光"`）：DOM 完整输出 `"清晨 的 光"`，带尾随空格的 `'晨 '` 实测宽度 `40.5px`（无空格单字 `'清'` 为 `34.3px`）。
+
+---
+
+## 本轮接手交接：3.2.9-denza.10（全场景逐字多字符顺序点亮统一化 / 播放页与经典 UI 性能优化 / 边界修复）
+
+- **架构统一化（`src/lyrics/model.ts`、`src/lyrics/np-plan.ts`、`src/app/space/bind.ts`）**：
+  - 将单时间戳包含多个非拉丁字符（如 `<00:01.00>我们的<00:02.20>`、TTML `<span begin="2.0" end="2.5">清晨</span>`）及连续相同时间戳的单元拆分直接下沉至 `src/lyrics/model.ts`（`buildLyrics`），同时保持拉丁音节（如 `['hel', 'lo']`）原有单元粒度以兼容 `spread` 退场测试。
+  - 2D 特效歌词（`src/director/layout.ts` + `src/director/words.ts` `unitPose`）、空间 3D 场景悬浮歌词（`src/app/space/bind.ts` 读取 `buildNpLinePlans` 的 `charTimes` 与 `text` 注入 `AirLine`）及播放页/空间歌词面板（`NpLyrics.tsx`）统一消费同一歌词模型，无需各自维护一套启发式。
+- **播放页歌词与经典模式 UI 性能优化（`src/app/ui/NpLyrics.tsx`、`src/app/ui/NpLyrics.module.css`、`src/app/ui/LiveEq.tsx`、`src/app/views/Player.tsx`、`src/app/views/NowPlaying.tsx`、`src/app/views/Shell.tsx`）**：
+  - `NpLyrics`：`measure()` 预缓存每行 DOM 引用（零每帧 `querySelectorAll`）；非激活行关闭 `-webkit-background-clip: text` 渐变遮罩与 `text-shadow`；已唱完字符在 `0.22s` 余辉后 `--gl` 归零并锁定常量样式，使每帧仅当前正在演唱的 1–2 个字符写 DOM；`|d| > 10` 的远端离屏行设置 `data-far="true"` 关闭高斯模糊与弹簧逐帧位移。
+  - 经典 UI：`LiveEq` 在暂停静止或页面隐藏时自动停用 `rAF` 循环并去重 `scaleY` 写入；`Progress` 对 `--k` 与秒级 `fmtTime` 实施脏检查；`NowPlaying` 与 `PlayerCard` 收敛 `lib` 订阅至 `trackOf(id)`；`Activity` 计数改为 `useMemo`。
+- **边界情况修复（`src/lyrics/parse.ts`、`src/lyrics/ttml.ts`、`src/app/ui/NpLyrics.tsx`）**：
+  - 修复逐字 LRC 首 `<tag>` 前文本保留、TTML `<p>` 内跨 `<span>` 标点拼接、乱序/递减时间戳单调归一化、向前跳进（Forward Seek）跨行 `data-completed="true"` 补齐及播放页滚轮手动滚动上下界钳制。

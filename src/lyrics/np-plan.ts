@@ -22,6 +22,8 @@ export interface NpHarmPlan {
 export interface NpLinePlan {
   start: number;
   sungEnd: number;
+  text: string;
+  charTimes: number[];
   words: NpWordPlan[];
   harms: NpHarmPlan[];
 }
@@ -266,7 +268,26 @@ export function buildNpLinePlans(lines: Line[], beatLen?: (t: number) => number)
       start = Math.max(pHoldEnd, L.t - pPlan.sungEnd >= bl ? L.t - bl / 2 : L.t - 0.15);
     }
 
-    plans.push({ start, sungEnd, words, harms });
+    const text = words.length
+      ? words
+          .flatMap((w) => w.units.map((u) => u.c + (u.spaceAfter ? ' ' : '')))
+          .join('')
+          .trim()
+      : L.text;
+    const charTimes: number[] = [];
+    if (L.kar) {
+      for (const wp of words) {
+        for (const up of wp.units) {
+          const chars = [...up.c].filter((ch) => ch !== ' ');
+          const m = Math.max(1, chars.length);
+          for (let r = 0; r < chars.length; r++) {
+            charTimes.push(up.t0 + ((up.t1 - up.t0) * r) / m);
+          }
+        }
+      }
+    }
+
+    plans.push({ start, sungEnd, text, charTimes, words, harms });
   }
   return plans;
 }

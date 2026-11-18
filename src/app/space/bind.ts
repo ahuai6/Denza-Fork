@@ -7,7 +7,7 @@ import { coverUrl, D, type Settings } from '../bridge';
 import { player, playIds, toggle, next, prev } from '../playback/player';
 import { setSettings } from '../actions/settings';
 import { engine, audioContext } from '../playback/stage';
-import { accentClock, fontStack, ensureFont, subLines } from '../../engine';
+import { accentClock, fontStack, ensureFont, subLines, buildNpLinePlans } from '../../engine';
 import { ts } from './i18n';
 import { fromLibrary, rhythmAt, beatsIn, type SpaceLibrary, type SpaceRhythm, type SpaceBeat } from './data';
 
@@ -184,15 +184,18 @@ export function createBind(): SpaceBind {
       const t = lastTrack;
       if (s?.doc !== linesFor) {
         linesFor = s?.doc ?? null;
-        lines = (s?.doc?.lines || [])
-          .filter((L) => L.text.trim())
-          .map((L) => {
+        const docLines = s?.doc?.lines || [],
+          npPlans = s?.doc ? buildNpLinePlans(docLines, (tm) => s.map.beatLen(tm)) : [];
+        lines = docLines
+          .map((L, idx) => ({ L, plan: npPlans[idx] }))
+          .filter(({ L }) => L.text.trim())
+          .map(({ L, plan }) => {
             const hw = L.words.filter((w) => w.harm?.text.trim());
             return {
               t: L.t,
               end: L.end,
-              sung: L.sung,
-              text: L.text,
+              sung: plan?.sungEnd ?? L.sung,
+              text: plan?.text || L.text,
               subs: L.subs || [],
               reads: L.reads || [],
               harm: hw.length
@@ -202,7 +205,11 @@ export function createBind(): SpaceBind {
                   }
                 : null,
               kar: !!L.kar,
-              times: L.kar ? L.words.flatMap((w) => w.units.map((u) => u.t ?? w.t)) : [],
+              times: L.kar
+                ? plan?.charTimes?.length
+                  ? plan.charTimes
+                  : L.words.flatMap((w) => w.units.map((u) => u.t ?? w.t))
+                : [],
             };
           });
       }
